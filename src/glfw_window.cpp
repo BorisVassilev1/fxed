@@ -47,12 +47,11 @@ Window::Window(nri::NRI &nri, int width, int height, const char *name, bool vsyn
 		this->height = height;
 	});
 
-	//glfwMakeContextCurrent(window);
+	// glfwMakeContextCurrent(window);
 
 	glfwSwapInterval(vsync);
-	
+
 	nriWindow = nri.createGLFWWindow(window);
-	
 }
 
 Window::Window(nri::NRI &nri, int width, int height, const char *name, bool vsync, bool resizable)
@@ -78,9 +77,7 @@ bool Window::shouldClose() { return glfwWindowShouldClose(window); }
 
 void Window::setShouldClose(bool b) { glfwSetWindowShouldClose(window, b); }
 
-void Window::setEnableViewports(bool b) {
-	this->enableViewports = b;
-}
+void Window::setEnableViewports(bool b) { this->enableViewports = b; }
 
 void Window::swapBuffers() {
 	nriWindow->endFrame();
@@ -109,7 +106,8 @@ void Window::swapBuffers() {
 }
 
 void Window::beginFrame() {
-	glfwWaitEvents();
+	//glfwWaitEvents();
+	glfwPollEvents();
 
 	nriWindow->beginFrame();
 }
@@ -119,7 +117,7 @@ void Window::close() { glfwSetWindowShouldClose(window, GLFW_TRUE); }
 Window::~Window() {
 	if (window != nullptr) {
 		glfwDestroyWindow(window);
-		window	= nullptr;
+		window = nullptr;
 	}
 }
 
@@ -136,13 +134,8 @@ void Window::addResizeCallback(const std::function<void(GLFWwindow *, int, int)>
 }
 
 void Window::defaultFrameCallback(long draw_time, long frame_time, long frames) {
-#ifndef __EMSCRIPTEN__
-	std::cout << std::fixed << std::setprecision(2) << "\rdraw time: " << (draw_time / 1e6) << "ms, FPS: " << frames
-			  << "         " << std::flush;		//<< std::endl;
-#else
-	dbLog(LOG_INFO, std::fixed, std::setprecision(2), "draw time: ", (draw_time / 1e6), "ms, FPS: ", frames,
-		  "         ");
-#endif
+	//std::cout << std::fixed << std::setprecision(2) << "\rdraw time: " << (draw_time / 1e6) << "ms, FPS: " << frames
+	//		  << "         " << std::flush;		//<< std::endl;
 }
 
 void Window::setFrameCallback(void (*callback)(long, long, long)) { frameCallback = callback; }

@@ -78,6 +78,9 @@ class Window {
 	void addResizeCallback(const std::function<void(GLFWwindow *window, int width, int height)> &callback);
 
 	void setClearColor(const glm::vec4 &color) { glClearColor(color.r, color.g, color.b, color.a); }
+
+	auto &getMainQueue() { return nriWindow->getMainQueue(); }
+	auto &getNativeWindow() { return nriWindow; }
 };
 
 }	  // namespace fxed

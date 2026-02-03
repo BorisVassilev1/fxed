@@ -319,7 +319,7 @@ void VulkanNRI::pickPhysicalDevice() {
 
 	for (const auto &device : physicalDevices) {
 		dbLog(dbg::LOG_INFO, "Found device: ", device.getProperties().deviceName);
-		//printDeviceQueueFamiliesInfo(device);
+		// printDeviceQueueFamiliesInfo(device);
 		if (isDeviceSuitable(device)) {
 			physicalDevice = device;
 			break;
@@ -559,19 +559,14 @@ VulkanBuffer::VulkanBuffer(VulkanNRI &nri, std::size_t size, BufferUsage usage)
 	: nri(&nri), buffer(nullptr), allocation(nullptr), offset(0), size(size) {
 	vk::BufferUsageFlags bufferUsageFlags;
 	if (usage & BufferUsage::BUFFER_USAGE_VERTEX)
-		bufferUsageFlags |= vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eShaderDeviceAddress |
-							vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR;
+		bufferUsageFlags |= vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eShaderDeviceAddress;
 	if (usage & BufferUsage::BUFFER_USAGE_INDEX)
-		bufferUsageFlags |= vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eShaderDeviceAddress |
-							vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR;
+		bufferUsageFlags |= vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eShaderDeviceAddress;
 	if (usage & BufferUsage::BUFFER_USAGE_UNIFORM) bufferUsageFlags |= vk::BufferUsageFlagBits::eUniformBuffer;
 	if (usage & BufferUsage::BUFFER_USAGE_STORAGE)
-		bufferUsageFlags |= vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eShaderDeviceAddress |
-							vk::BufferUsageFlagBits::eAccelerationStructureStorageKHR;
+		bufferUsageFlags |= vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eShaderDeviceAddress;
 	if (usage & BufferUsage::BUFFER_USAGE_TRANSFER_SRC) bufferUsageFlags |= vk::BufferUsageFlagBits::eTransferSrc;
-	if (usage & BufferUsage::BUFFER_USAGE_TRANSFER_DST)
-		bufferUsageFlags |= vk::BufferUsageFlagBits::eTransferDst |
-							vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR;
+	if (usage & BufferUsage::BUFFER_USAGE_TRANSFER_DST) bufferUsageFlags |= vk::BufferUsageFlagBits::eTransferDst;
 	if (usage & BufferUsage::BUFFER_USAGE_ACCELERATION_STRUCTURE)
 		bufferUsageFlags |=
 			vk::BufferUsageFlagBits::eAccelerationStructureStorageKHR | vk::BufferUsageFlagBits::eShaderDeviceAddress;
@@ -699,9 +694,9 @@ VulkanTexture2D::VulkanTexture2D(VulkanNRI &nri, VulkanImage2D &image2D)
 	imageView = vk::raii::ImageView(nri.getDevice(), imageViewInfo);
 
 	vk::SamplerCreateInfo samplerInfo({}, vk::Filter::eLinear, vk::Filter::eLinear, vk::SamplerMipmapMode::eLinear,
-									  vk::SamplerAddressMode::eRepeat, vk::SamplerAddressMode::eRepeat,
-									  vk::SamplerAddressMode::eRepeat, 0.0f, VK_FALSE, 1.0f, VK_FALSE,
-									  vk::CompareOp::eAlways, 0.0f, 0.0f, vk::BorderColor::eIntOpaqueBlack, VK_FALSE);
+									  vk::SamplerAddressMode::eClampToEdge, vk::SamplerAddressMode::eClampToEdge,
+									  vk::SamplerAddressMode::eClampToEdge, 0.0f, VK_FALSE, 1.0f, VK_FALSE,
+									  vk::CompareOp::eAlways, 0.0f, 0.0f, vk::BorderColor::eFloatTransparentBlack, VK_FALSE);
 	sampler = vk::raii::Sampler(nri.getDevice(), samplerInfo);
 }
 
@@ -784,8 +779,8 @@ void VulkanImage2D::prepareForStorage(CommandBuffer &commandBuffer) {
 					 vk::AccessFlagBits::eTransferWrite | vk::AccessFlagBits::eColorAttachmentWrite,
 					 vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite,
 					 vk::PipelineStageFlagBits::eTransfer | vk::PipelineStageFlagBits::eColorAttachmentOutput,
-					 vk::PipelineStageFlagBits::eComputeShader | vk::PipelineStageFlagBits::eRayTracingShaderKHR |
-						 vk::PipelineStageFlagBits::eFragmentShader | vk::PipelineStageFlagBits::eVertexShader);
+					 vk::PipelineStageFlagBits::eComputeShader | vk::PipelineStageFlagBits::eFragmentShader |
+						 vk::PipelineStageFlagBits::eVertexShader);
 }
 
 void VulkanImage2D::prepareForTexture(CommandBuffer &commandBuffer) {
@@ -796,7 +791,7 @@ void VulkanImage2D::prepareForTexture(CommandBuffer &commandBuffer) {
 					 vk::AccessFlagBits::eShaderRead,
 					 vk::PipelineStageFlagBits::eTransfer | vk::PipelineStageFlagBits::eColorAttachmentOutput,
 					 vk::PipelineStageFlagBits::eFragmentShader | vk::PipelineStageFlagBits::eVertexShader |
-						 vk::PipelineStageFlagBits::eComputeShader | vk::PipelineStageFlagBits::eRayTracingShaderKHR);
+						 vk::PipelineStageFlagBits::eComputeShader);
 }
 
 void VulkanImage2D::copyFrom(CommandBuffer &commandBuffer, Buffer &srcBuffer, std::size_t srcOffset,
@@ -1020,6 +1015,9 @@ ImageAndViewRef VulkanWindow::getCurrentRenderTarget() {
 	auto &sci = swapChainImages[currentImageIndex];
 	return ImageAndViewRef(sci.image, sci.view);
 }
+CommandBuffer  &VulkanWindow::getCurrentCommandBuffer() {
+	return *commandBuffer;
+}
 
 void VulkanWindow::endFrame() {
 	getCurrentRenderTarget().image.prepareForPresent(*commandBuffer);
@@ -1141,7 +1139,8 @@ std::pair<std::vector<vk::raii::ShaderModule>, std::vector<vk::PipelineShaderSta
 		std::wstring			  wSourceFile = std::wstring(stageInfo.sourceFile.begin(), stageInfo.sourceFile.end());
 		HRESULT					  hr		  = utils->LoadFile(wSourceFile.c_str(), nullptr, &sourceBlob);
 		if (FAILED(hr)) {
-			throw std::runtime_error(std::format("Failed to load shader source file: {}", stageInfo.sourceFile));
+			dbLog(dbg::LOG_ERROR, "Failed to load shader source file: ", stageInfo.sourceFile);
+			THROW_RUNTIME_ERR(std::format("Failed to load shader source file: {}", stageInfo.sourceFile));
 		}
 
 		std::vector<LPCWSTR> arguments;
@@ -1269,7 +1268,7 @@ std::unique_ptr<GraphicsProgram> VulkanProgramBuilder::buildGraphicsProgram() {
 														   VK_FALSE, VK_FALSE);
 
 	vk::PipelineColorBlendAttachmentState colorBlendAttachment(
-		VK_FALSE, vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd, vk::BlendFactor::eOne,
+		VK_TRUE, vk::BlendFactor::eSrcAlpha, vk::BlendFactor::eOne, vk::BlendOp::eAdd, vk::BlendFactor::eOne,
 		vk::BlendFactor::eZero, vk::BlendOp::eAdd,
 		vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB |
 			vk::ColorComponentFlagBits::eA);
@@ -1281,7 +1280,7 @@ std::unique_ptr<GraphicsProgram> VulkanProgramBuilder::buildGraphicsProgram() {
 														vk::DynamicState::eBlendConstants};
 	vk::PipelineDynamicStateCreateInfo dynamicStateInfo({}, dynamicStates.size(), dynamicStates.data());
 
-	vk::PipelineDepthStencilStateCreateInfo depthStencilInfo({}, VK_TRUE, VK_TRUE, vk::CompareOp::eLess, VK_FALSE,
+	vk::PipelineDepthStencilStateCreateInfo depthStencilInfo({}, VK_FALSE, VK_TRUE, vk::CompareOp::eLess, VK_FALSE,
 															 VK_FALSE, vk::StencilOpState(), vk::StencilOpState(), 0.0f,
 															 1.0f);
 

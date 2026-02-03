@@ -290,8 +290,8 @@ class NRI {
 	virtual std::unique_ptr<CommandPool>   createCommandPool()													  = 0;
 	virtual CommandPool					  &getDefaultCommandPool()												  = 0;
 
-	virtual std::unique_ptr<ProgramBuilder> createProgramBuilder() = 0;
-	virtual std::unique_ptr<Window> createGLFWWindow(GLFWwindow *w) = 0;
+	virtual std::unique_ptr<ProgramBuilder> createProgramBuilder()			= 0;
+	virtual std::unique_ptr<Window>			createGLFWWindow(GLFWwindow *w) = 0;
 
 	virtual std::unique_ptr<BLAS> createBLAS(Buffer &vertexBuffer, Format vertexFormat, std::size_t vertexOffset,
 											 uint32_t vertexCount, std::size_t vertexStride, Buffer &indexBuffer,
@@ -526,6 +526,12 @@ class ImageAndViewRef {
 	ImageView &view;
 };
 
+class ImageAndAllocation {
+   public:
+	std::unique_ptr<Image2D>	image;
+	std::unique_ptr<Allocation> allocation;
+};
+
 // class Renderer : public QWidget {
 //    protected:
 //	NRI &nri;
@@ -545,9 +551,10 @@ class Window {
 	virtual ~Window() {}
 	Window(NRI &nri) : nri(nri) {}
 
-	virtual void			beginFrame()			 = 0;
-	virtual void			endFrame()				 = 0;
-	virtual ImageAndViewRef getCurrentRenderTarget() = 0;
+	virtual void			beginFrame()			  = 0;
+	virtual void			endFrame()				  = 0;
+	virtual ImageAndViewRef getCurrentRenderTarget()  = 0;
+	virtual CommandBuffer  &getCurrentCommandBuffer() = 0;
 
 	virtual void beginRendering(CommandBuffer &cmdBuf, const ImageAndViewRef &renderTarget) = 0;
 	virtual void endRendering(CommandBuffer &cmdBuf)										= 0;

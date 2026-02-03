@@ -437,7 +437,7 @@ class VulkanWindow : public Window {
 	uint32_t width = 0, height = 0;
 	uint32_t currentImageIndex = 0;
 
-	vk::Format surfaceFormat;
+	vk::Format		  surfaceFormat;
 	vk::ColorSpaceKHR surfaceColorSpace;
 
    protected:
@@ -448,6 +448,7 @@ class VulkanWindow : public Window {
 	void			beginFrame() override;
 	void			endFrame() override;
 	ImageAndViewRef getCurrentRenderTarget() override;
+	CommandBuffer  &getCurrentCommandBuffer() override;
 
 	void beginRendering(CommandBuffer &cmdBuf, const ImageAndViewRef &renderTarget) override;
 	void endRendering(CommandBuffer &cmdBuf) override;

@@ -24,6 +24,7 @@ class CustomIncludeHandler : public IDxcIncludeHandler {
 
    public:
 	CustomIncludeHandler(CComPtr<IDxcUtils> utils) : pUtils(utils) {}
+	virtual ~CustomIncludeHandler() {};
 
 	HRESULT STDMETHODCALLTYPE LoadSource(_In_ LPCWSTR							  pFilename,
 										 _COM_Outptr_result_maybenull_ IDxcBlob **ppIncludeSource) override {
