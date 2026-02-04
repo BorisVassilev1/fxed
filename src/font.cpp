@@ -98,7 +98,7 @@ Font::Font(nri::NRI &nri, nri::CommandQueue &q, const char *fontfilename, uint32
 			packer.setDimensionsConstraint(DimensionsConstraint::SQUARE);
 			packer.setDimensions(atlasSize, atlasSize);
 			// packer.setMinimumScale(24.0);
-			packer.setScale(32.0);
+			packer.setScale(24.0);
 			packer.setPixelRange(2.0);
 			packer.setMiterLimit(1.0);
 			packer.setInnerPixelPadding(1);

@@ -340,14 +340,14 @@ void VulkanNRI::createLogicalDevice() {
 
 	vk::PhysicalDeviceFeatures					 deviceFeatures{};
 	vk::PhysicalDeviceDescriptorIndexingFeatures descriptorIndexingFeatures(
-		VK_TRUE,	 // shaderInputAttachmentArrayDynamicIndexing
+		VK_FALSE,	 // shaderInputAttachmentArrayDynamicIndexing
 		VK_TRUE,	 // shaderUniformTexelBufferArrayDynamicIndexing
 		VK_TRUE,	 // shaderStorageTexelBufferArrayDynamicIndexing
 		VK_TRUE,	 // shaderUniformBufferArrayNonUniformIndexing
 		VK_TRUE,	 // shaderStorageBufferArrayNonUniformIndexing
 		VK_TRUE,	 // shaderSampledImageArrayNonUniformIndexing
 		VK_TRUE,	 // shaderStorageImageArrayNonUniformIndexing
-		VK_TRUE,	 // shaderInputAttachmentArrayNonUniformIndexing
+		VK_FALSE,	 // shaderInputAttachmentArrayNonUniformIndexing
 		VK_TRUE,	 // shaderUniformTexelBufferArrayNonUniformIndexing
 		VK_TRUE,	 // shaderStorageTexelBufferArrayNonUniformIndexing
 		VK_TRUE,	 // descriptorBindingUniformBufferUpdateAfterBind

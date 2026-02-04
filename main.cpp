@@ -48,7 +48,7 @@ int main() {
 	double				  advanceY = 0.0;
 	double				  advance  = 0.0;
 
-	const double pixel = 1.0 / 32.0;	 // font size
+	const double pixel = 1.0 / 24.0;	 // font size
 	for (size_t i = 0; i < text.size(); i++) {
 		if (text[i] == '\n') {
 			advanceY += 1.0;
@@ -100,8 +100,7 @@ int main() {
 
 	window.addResizeCallback([&](GLFWwindow *, int w, int h) {
 		float aspect		  = static_cast<float>(w) / static_cast<float>(h);
-		pushConstants.scale.x = 0.2f / aspect;
-		pushConstants.scale.y = 0.2f;
+		pushConstants.scale.x = pushConstants.scale.y / aspect;
 	});
 
 	fxed::Keyboard::addKeyCallback([&](GLFWwindow *window, int key, int, int action, int mods) {
