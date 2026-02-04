@@ -11,6 +11,7 @@ struct PushConstants {
 	glm::vec2			translate;
 	glm::vec2			scale;
 	nri::ResourceHandle textureHandle;
+	float textSize = 24.0f;
 };
 
 int main() {
@@ -20,9 +21,11 @@ int main() {
 
 	// glfwSetWindowAttrib(window.getHandle(), GLFW_DECORATED, !glfwGetWindowAttrib(window.getHandle(),
 	// GLFW_DECORATED));
-	auto &win = window.getNativeWindow();
+	auto &win		= window.getNativeWindow();
+	win->clearColor = glm::vec4(30 / 255.f, 30 / 255.f, 46 / 255.f, 1.0f);
 
-	std::string_view fontPath = "/usr/share/fonts/TTF/HackNerdFontMono-Regular.ttf";
+	// std::string_view fontPath = "/usr/share/fonts/TTF/HackNerdFontMono-Regular.ttf";
+	std::string_view fontPath = "/usr/local/share/fonts/f/FantasqueSansMNerdFont_Regular.ttf";
 	// std::string_view fontPath = "/usr/share/fonts/gsfonts/StandardSymbolsPS.otf";
 
 	auto font = Font(*nri, window.getMainQueue(), fontPath.data(), 512);
@@ -101,6 +104,7 @@ int main() {
 	window.addResizeCallback([&](GLFWwindow *, int w, int h) {
 		float aspect		  = static_cast<float>(w) / static_cast<float>(h);
 		pushConstants.scale.x = pushConstants.scale.y / aspect;
+		pushConstants.textSize = h * pushConstants.scale.y;
 	});
 
 	fxed::Keyboard::addKeyCallback([&](GLFWwindow *window, int key, int, int action, int mods) {

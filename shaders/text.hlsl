@@ -17,6 +17,7 @@ struct PushConstants
 {
 	float4 translate_scale; // xy = translate, zw = scale
 	TextureHandle texture;
+	float textSize;
 };
 
 VK_PUSH_CONST_ATTR
@@ -57,19 +58,23 @@ float4 PSMain(PSInput input) : SV_TARGET
 		texColor = float4(1.0, 1.0, 1.0, 1.0);
 	}
 
-	float PixelRange = 16; // Distance field range in pixels
-	float Smoothing = 0.3;  // Edge smoothing factor
+	float largeness = (pushConstants.textSize - 12.f) / 48.0f; // Assuming textSize ranges from 12 to 60
+	largeness = clamp(largeness, 0.0f, 1.0f);
+
+	float Smoothing = lerp(0.25f, 1.0f, largeness);
 
 	float d = median(texColor.rgb) - 0.5f;
-	float w = clamp(d/fwidth(d) + 0.5, 0.0, 1.0);
 
-	float4 insideColor = float4(1.0, 1.0, 1.0, 1.0);
-	float4 outsideColor = float4(1.0, 0.0, 0.0, 0.0);
+	float pxr = d/fwidth(d) ;
+	float w = smoothstep(-Smoothing,Smoothing, pxr);
+
+	float4 insideColor = float4(243/255.f, 139/255.f, 168/255.f, 1.0);
+	float4 outsideColor = float4(30/255.f, 30/255.f, 46/255.f, 1.0);
 	float4 color = lerp(outsideColor, insideColor, w);
 
 	// Calculate screen-space derivatives for proper antialiasing
 
-	//return float4(input.texCoord, 0.0, 1.0);
+	// gamma correction
+
 	return float4(color);
-	//return float4(1.0, 1.0, 1.0, 1.0);
 }

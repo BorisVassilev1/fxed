@@ -340,26 +340,26 @@ void VulkanNRI::createLogicalDevice() {
 
 	vk::PhysicalDeviceFeatures					 deviceFeatures{};
 	vk::PhysicalDeviceDescriptorIndexingFeatures descriptorIndexingFeatures(
-		VK_FALSE,	 // shaderInputAttachmentArrayDynamicIndexing
-		VK_TRUE,	 // shaderUniformTexelBufferArrayDynamicIndexing
-		VK_TRUE,	 // shaderStorageTexelBufferArrayDynamicIndexing
-		VK_TRUE,	 // shaderUniformBufferArrayNonUniformIndexing
-		VK_TRUE,	 // shaderStorageBufferArrayNonUniformIndexing
-		VK_TRUE,	 // shaderSampledImageArrayNonUniformIndexing
-		VK_TRUE,	 // shaderStorageImageArrayNonUniformIndexing
-		VK_FALSE,	 // shaderInputAttachmentArrayNonUniformIndexing
-		VK_TRUE,	 // shaderUniformTexelBufferArrayNonUniformIndexing
-		VK_TRUE,	 // shaderStorageTexelBufferArrayNonUniformIndexing
-		VK_TRUE,	 // descriptorBindingUniformBufferUpdateAfterBind
-		VK_TRUE,	 // descriptorBindingStorageBufferUpdateAfterBind
-		VK_TRUE,	 // descriptorBindingSampledImageUpdateAfterBind
-		VK_TRUE,	 // descriptorBindingStorageImageUpdateAfterBind
-		VK_TRUE,	 // descriptorBindingStorageTexelBufferUpdateAfterBind
-		VK_TRUE,	 // descriptorBindingUniformTexelBufferUpdateAfterBind
-		VK_TRUE,	 // descriptorBindingUpdateUnusedWhilePending
-		VK_TRUE,	 // descriptorBindingPartiallyBound
-		VK_TRUE,	 // descriptorBindingVariableDescriptorCount
-		VK_TRUE,	 // runtimeDescriptorArray
+		VK_FALSE,	  // shaderInputAttachmentArrayDynamicIndexing
+		VK_TRUE,	  // shaderUniformTexelBufferArrayDynamicIndexing
+		VK_TRUE,	  // shaderStorageTexelBufferArrayDynamicIndexing
+		VK_TRUE,	  // shaderUniformBufferArrayNonUniformIndexing
+		VK_TRUE,	  // shaderStorageBufferArrayNonUniformIndexing
+		VK_TRUE,	  // shaderSampledImageArrayNonUniformIndexing
+		VK_TRUE,	  // shaderStorageImageArrayNonUniformIndexing
+		VK_FALSE,	  // shaderInputAttachmentArrayNonUniformIndexing
+		VK_TRUE,	  // shaderUniformTexelBufferArrayNonUniformIndexing
+		VK_TRUE,	  // shaderStorageTexelBufferArrayNonUniformIndexing
+		VK_TRUE,	  // descriptorBindingUniformBufferUpdateAfterBind
+		VK_TRUE,	  // descriptorBindingStorageBufferUpdateAfterBind
+		VK_TRUE,	  // descriptorBindingSampledImageUpdateAfterBind
+		VK_TRUE,	  // descriptorBindingStorageImageUpdateAfterBind
+		VK_TRUE,	  // descriptorBindingStorageTexelBufferUpdateAfterBind
+		VK_TRUE,	  // descriptorBindingUniformTexelBufferUpdateAfterBind
+		VK_TRUE,	  // descriptorBindingUpdateUnusedWhilePending
+		VK_TRUE,	  // descriptorBindingPartiallyBound
+		VK_TRUE,	  // descriptorBindingVariableDescriptorCount
+		VK_TRUE,	  // runtimeDescriptorArray
 		nullptr);
 	vk::PhysicalDeviceDynamicRenderingFeatures	  dynamicRenderingFeature(VK_TRUE, &descriptorIndexingFeatures);
 	vk::PhysicalDeviceBufferDeviceAddressFeatures bufferDeviceAddressFeature(VK_TRUE, VK_FALSE, VK_FALSE,
@@ -696,7 +696,8 @@ VulkanTexture2D::VulkanTexture2D(VulkanNRI &nri, VulkanImage2D &image2D)
 	vk::SamplerCreateInfo samplerInfo({}, vk::Filter::eLinear, vk::Filter::eLinear, vk::SamplerMipmapMode::eLinear,
 									  vk::SamplerAddressMode::eClampToEdge, vk::SamplerAddressMode::eClampToEdge,
 									  vk::SamplerAddressMode::eClampToEdge, 0.0f, VK_FALSE, 1.0f, VK_FALSE,
-									  vk::CompareOp::eAlways, 0.0f, 0.0f, vk::BorderColor::eFloatTransparentBlack, VK_FALSE);
+									  vk::CompareOp::eAlways, 0.0f, 0.0f, vk::BorderColor::eFloatTransparentBlack,
+									  VK_FALSE);
 	sampler = vk::raii::Sampler(nri.getDevice(), samplerInfo);
 }
 
@@ -1015,9 +1016,7 @@ ImageAndViewRef VulkanWindow::getCurrentRenderTarget() {
 	auto &sci = swapChainImages[currentImageIndex];
 	return ImageAndViewRef(sci.image, sci.view);
 }
-CommandBuffer  &VulkanWindow::getCurrentCommandBuffer() {
-	return *commandBuffer;
-}
+CommandBuffer &VulkanWindow::getCurrentCommandBuffer() { return *commandBuffer; }
 
 void VulkanWindow::endFrame() {
 	getCurrentRenderTarget().image.prepareForPresent(*commandBuffer);
@@ -1066,7 +1065,7 @@ void VulkanWindow::beginRendering(CommandBuffer &cmdBuf, const ImageAndViewRef &
 	colorAttachment.loadOp		= vk::AttachmentLoadOp::eClear;
 	colorAttachment.storeOp		= vk::AttachmentStoreOp::eStore;
 	vk::ClearValue clearValue;
-	clearValue.color				   = vk::ClearColorValue(std::array<float, 4>({0.0f, 0.0f, 0.0f, 1.0f}));
+	clearValue.color.setFloat32({this->clearColor.r, this->clearColor.g, this->clearColor.b, this->clearColor.a});
 	colorAttachment.clearValue		   = clearValue;
 	renderingInfo.colorAttachmentCount = 1;
 	renderingInfo.pColorAttachments	   = &colorAttachment;
@@ -1268,8 +1267,8 @@ std::unique_ptr<GraphicsProgram> VulkanProgramBuilder::buildGraphicsProgram() {
 														   VK_FALSE, VK_FALSE);
 
 	vk::PipelineColorBlendAttachmentState colorBlendAttachment(
-		VK_TRUE, vk::BlendFactor::eSrcAlpha, vk::BlendFactor::eOne, vk::BlendOp::eAdd, vk::BlendFactor::eOne,
-		vk::BlendFactor::eZero, vk::BlendOp::eAdd,
+		VK_TRUE, vk::BlendFactor::eSrcAlpha, vk::BlendFactor::eOneMinusSrcAlpha, vk::BlendOp::eAdd,
+		vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
 		vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB |
 			vk::ColorComponentFlagBits::eA);
 

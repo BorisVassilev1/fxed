@@ -560,6 +560,7 @@ class Window {
 	virtual void endRendering(CommandBuffer &cmdBuf)										= 0;
 
 	virtual CommandQueue &getMainQueue() = 0;
+	glm::vec4 clearColor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
 };
 
 }	  // namespace nri

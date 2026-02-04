@@ -39,30 +39,33 @@ class ImageAtlasStorage {
 			data = nullptr;
 		}
 	}
-	void put(int x, int y, const msdfgen::BitmapConstRef<float, 3> &subBitmap) {
+	void put(int x, int y, const msdfgen::BitmapConstRef<float, 4> &subBitmap) {
 		assert(data != nullptr);
 		assert(x + subBitmap.width <= width && y + subBitmap.height <= height);		// FIX BOUNDS CHECK
 		for (int j = 0; j < subBitmap.height; ++j) {
 			for (int i = 0; i < subBitmap.width; ++i) {
 				((T *)data)[(y + j) * width * N + (x * N) + i * N + 0] =
-					subBitmap.pixels[j * subBitmap.width * 3 + i * 3 + 0];
+					subBitmap.pixels[j * subBitmap.width * 4 + i * 4 + 0];
 				((T *)data)[(y + j) * width * N + (x * N) + i * N + 1] =
-					subBitmap.pixels[j * subBitmap.width * 3 + i * 3 + 1];
+					subBitmap.pixels[j * subBitmap.width * 4 + i * 4 + 1];
 				((T *)data)[(y + j) * width * N + (x * N) + i * N + 2] =
-					subBitmap.pixels[j * subBitmap.width * 3 + i * 3 + 2];
-				//((T *)data)[(y + j) * width * N + (x * N) + i * N + 3] = 1.0f;  // alpha
+					subBitmap.pixels[j * subBitmap.width * 4 + i * 4 + 2];
+				((T *)data)[(y + j) * width * N + (x * N) + i * N + 3] =
+					subBitmap.pixels[j * subBitmap.width * 4 + i * 4 + 3];
 			}
 		}
 	}
-	void get(int x, int y, const msdfgen::BitmapRef<float, 3> &subBitmap) const {
+	void get(int x, int y, const msdfgen::BitmapRef<float, 4> &subBitmap) const {
 		for (int j = 0; j < subBitmap.height; ++j) {
 			for (int i = 0; i < subBitmap.width; ++i) {
-				subBitmap.pixels[j * subBitmap.width * 3 + i * 3 + 0] =
+				subBitmap.pixels[j * subBitmap.width * 4 + i * 4 + 0] =
 					((T *)data)[(y + j) * width * N + (x * N) + i * N + 0];
-				subBitmap.pixels[j * subBitmap.width * 3 + i * 3 + 1] =
+				subBitmap.pixels[j * subBitmap.width * 4 + i * 4 + 1] =
 					((T *)data)[(y + j) * width * N + (x * N) + i * N + 1];
-				subBitmap.pixels[j * subBitmap.width * 3 + i * 3 + 2] =
+				subBitmap.pixels[j * subBitmap.width * 4 + i * 4 + 2] =
 					((T *)data)[(y + j) * width * N + (x * N) + i * N + 2];
+				subBitmap.pixels[j * subBitmap.width * 4 + i * 4 + 3] =
+					((T *)data)[(y + j) * width * N + (x * N) + i * N + 3];
 			}
 		}
 	}
@@ -98,7 +101,7 @@ Font::Font(nri::NRI &nri, nri::CommandQueue &q, const char *fontfilename, uint32
 			packer.setDimensionsConstraint(DimensionsConstraint::SQUARE);
 			packer.setDimensions(atlasSize, atlasSize);
 			// packer.setMinimumScale(24.0);
-			packer.setScale(24.0);
+			packer.setScale(32.0);
 			packer.setPixelRange(2.0);
 			packer.setMiterLimit(1.0);
 			packer.setInnerPixelPadding(1);
@@ -108,8 +111,8 @@ Font::Font(nri::NRI &nri, nri::CommandQueue &q, const char *fontfilename, uint32
 
 			ImmediateAtlasGenerator<		 //
 				float,						 //
-				3,							 //
-				msdfGenerator,				 //
+				4,							 //
+				mtsdfGenerator,				 //
 				ImageAtlasStorage<float>	 //
 				>
 				generator(width, height);
