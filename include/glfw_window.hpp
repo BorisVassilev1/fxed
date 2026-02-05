@@ -3,6 +3,7 @@
 
 #include "nri.hpp"
 #include "vk_nri.hpp"
+#define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 
@@ -76,8 +77,6 @@ class Window {
 	 * @param callback - the function to be called.
 	 */
 	void addResizeCallback(const std::function<void(GLFWwindow *window, int width, int height)> &callback);
-
-	void setClearColor(const glm::vec4 &color) { glClearColor(color.r, color.g, color.b, color.a); }
 
 	auto &getMainQueue() { return nriWindow->getMainQueue(); }
 	auto &getNativeWindow() { return nriWindow; }

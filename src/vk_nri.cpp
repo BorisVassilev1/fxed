@@ -379,6 +379,7 @@ void VulkanNRI::createLogicalDevice() {
 	device = vk::raii::Device(physicalDevice, createInfo);
 }
 }	  // namespace nri
+#define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 namespace nri {
 static void prepareGLFW() {

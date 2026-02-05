@@ -21,7 +21,7 @@ Window::Window(nri::NRI &nri, int width, int height, const char *name, bool vsyn
 	glfwWindowHint(GLFW_BLUE_BITS, mode->blueBits);
 	glfwWindowHint(GLFW_REFRESH_RATE, mode->refreshRate);
 
-	glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER, GL_TRUE);
+	glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER, GLFW_TRUE);
 	glfwWindowHint(GLFW_SCALE_TO_MONITOR, GLFW_TRUE);
 
 	if (resizable) glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
