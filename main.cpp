@@ -26,8 +26,8 @@ int main() {
 
 	// std::string_view fontPath = "/usr/share/fonts/TTF/HackNerdFontMono-Regular.ttf";
 	//std::string_view fontPath = "/usr/local/share/fonts/f/FantasqueSansMNerdFont_Regular.ttf";
-	std::string_view fontPath = "C:/Windows/Fonts/arial.ttf";
 	// std::string_view fontPath = "/usr/share/fonts/gsfonts/StandardSymbolsPS.otf";
+	std::string fontPath = Font::getDefaultSystemFontPath();
 
 	auto font = Font(*nri, window.getMainQueue(), fontPath.data(), 512);
 
@@ -102,11 +102,14 @@ int main() {
 		.textureHandle = textureHandle,
 	};
 
-	window.addResizeCallback([&](GLFWwindow *, int w, int h) {
+	auto resizeCallback = [&](GLFWwindow *, int w, int h) {
 		float aspect		  = static_cast<float>(w) / static_cast<float>(h);
 		pushConstants.scale.x = pushConstants.scale.y / aspect;
 		pushConstants.textSize = h * pushConstants.scale.y;
-	});
+	};
+	resizeCallback(nullptr, window.getWidth(), window.getHeight());
+	
+	window.addResizeCallback(resizeCallback);
 
 	fxed::Keyboard::addKeyCallback([&](GLFWwindow *window, int key, int, int action, int mods) {
 		// zoom with ctrl + +/-

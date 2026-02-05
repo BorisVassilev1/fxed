@@ -168,3 +168,64 @@ Font::GlyphBox Font::getGlyphBox(char c) {
 							 .rect	  = {gb.rect.x, gb.rect.y, gb.rect.w, gb.rect.h}};
 	return box;
 }
+
+#ifdef _WIN32
+	#include <windows.h>
+	#include <shlobj.h>
+	#include <string>
+
+std::string getWindowsDefaultFont() {
+	char fontsPath[MAX_PATH];
+
+	// Get Windows Fonts directory
+	if (SHGetFolderPathA(NULL, CSIDL_FONTS, NULL, 0, fontsPath) == S_OK) {
+		// Common default fonts in order of preference
+		std::string segoeui = std::string(fontsPath) + "\\segoeui.ttf";		// Windows 7+
+		std::string tahoma	= std::string(fontsPath) + "\\tahoma.ttf";		// Older fallback
+
+		// Check which exists
+		if (GetFileAttributesA(segoeui.c_str()) != INVALID_FILE_ATTRIBUTES) { return segoeui; }
+		if (GetFileAttributesA(tahoma.c_str()) != INVALID_FILE_ATTRIBUTES) { return tahoma; }
+	}
+	return "";
+}
+#endif
+
+#ifdef __linux__
+	#include <fontconfig/fontconfig.h>
+	#include <string>
+
+std::string getLinuxDefaultFont() {
+	std::string fontPath;
+
+	FcConfig  *config  = FcInitLoadConfigAndFonts();
+	FcPattern *pattern = FcNameParse((const FcChar8 *)"sans-serif");
+
+	FcConfigSubstitute(config, pattern, FcMatchPattern);
+	FcDefaultSubstitute(pattern);
+
+	FcResult   result;
+	FcPattern *font = FcFontMatch(config, pattern, &result);
+
+	if (font) {
+		FcChar8 *file = nullptr;
+		if (FcPatternGetString(font, FC_FILE, 0, &file) == FcResultMatch) { fontPath = (char *)file; }
+		FcPatternDestroy(font);
+	}
+
+	FcPatternDestroy(pattern);
+	FcConfigDestroy(config);
+
+	return fontPath;
+}
+#endif
+
+std::string Font::getDefaultSystemFontPath() {
+#ifdef _WIN32
+	return getWindowsDefaultFont();
+#elif __linux__
+	return getLinuxDefaultFont();
+#else
+	return "";	   // Unsupported platform
+#endif
+}

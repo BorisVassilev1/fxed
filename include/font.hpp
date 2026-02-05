@@ -36,4 +36,7 @@ class Font {
 	auto getHandle() { return imageView->getHandle(); }
 
 	GlyphBox getGlyphBox(char c);
+
+
+	static std::string getDefaultSystemFontPath();
 };
