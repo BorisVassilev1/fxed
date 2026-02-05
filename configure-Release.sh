@@ -1,5 +1,5 @@
-cmake . -B build \
-	-DCMAKE_BUILD_TYPE=Debug \
+cmake . -B build-Release \
+	-DCMAKE_BUILD_TYPE=Release \
 	-DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
 	-DCMAKE_CXX_COMPILER=clang++ \
 	-DCMAKE_C_COMPILER=clang \

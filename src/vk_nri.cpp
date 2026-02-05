@@ -8,11 +8,15 @@
 #include <vulkan/vulkan_raii.hpp>
 #include <vulkan/vulkan_core.h>
 #ifdef _WIN32
-#include <wrl.h>
-#include <dxcapi.h>
-#pragma comment(lib, "dxcompiler.lib")
+	#include <wrl.h>
+	#include <dxcapi.h>
+	#pragma comment(lib, "dxcompiler.lib")
 #else
 	#include <dxc/dxcapi.h>
+#endif
+
+#ifdef NDEBUG
+	#include "shader_registry.hpp"
 #endif
 
 #include "dxc_include_handler.hpp"
@@ -1138,12 +1142,14 @@ std::pair<std::vector<vk::raii::ShaderModule>, std::vector<vk::PipelineShaderSta
 		}
 		const std::filesystem::path sourceFile{stageInfo.sourceFile};
 
-		std::ifstream fin(sourceFile);
-		std::string	  source{(std::istreambuf_iterator<char>(fin)), std::istreambuf_iterator<char>()};
+		std::string filename = sourceFile.filename().string();
+		std::replace(filename.begin(), filename.end(), '.', '_');
+		std::string cacheFileName = std::format("{}_{}.spv", filename, stageInfo.entryPoint);
+#ifndef NDEBUG
+		CComPtr<IDxcBlob> sourceBlob;
+		std::wstring	  wSourceFile = std::wstring(stageInfo.sourceFile.begin(), stageInfo.sourceFile.end());
+		HRESULT			  hr		  = includeHandler->LoadSource(wSourceFile.c_str(), &sourceBlob);
 
-		CComPtr<IDxcBlobEncoding> sourceBlob;
-		std::wstring			  wSourceFile = std::wstring(stageInfo.sourceFile.begin(), stageInfo.sourceFile.end());
-		HRESULT					  hr		  = utils->LoadFile(wSourceFile.c_str(), nullptr, &sourceBlob);
 		if (FAILED(hr)) {
 			dbLog(dbg::LOG_ERROR, "Failed to load shader source file: ", stageInfo.sourceFile);
 			THROW_RUNTIME_ERR(std::format("Failed to load shader source file: {}", stageInfo.sourceFile));
@@ -1172,7 +1178,7 @@ std::pair<std::vector<vk::raii::ShaderModule>, std::vector<vk::PipelineShaderSta
 		arguments.push_back(L"-D");
 		arguments.push_back(L"SHADER");
 		arguments.push_back(L"-I");
-		arguments.push_back(PROJECT_ROOT_DIR L"/shaders/");
+		arguments.push_back(L"./shaders/");
 		arguments.push_back(L"-fvk-use-dx-layout");
 		arguments.push_back(L"-fspv-target-env=vulkan1.2");
 		arguments.push_back(L"-HV");
@@ -1203,8 +1209,25 @@ std::pair<std::vector<vk::raii::ShaderModule>, std::vector<vk::PipelineShaderSta
 		CComPtr<IDxcBlob> spirvBlob;
 		result->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&spirvBlob), nullptr);
 
+		// write to shader cache
+		std::filesystem::path cachePath = std::filesystem::path("shadercache") / cacheFileName;
+		std::filesystem::create_directories(cachePath.parent_path());
+		std::ofstream ofs(cachePath, std::ios::binary);
+		ofs.write(reinterpret_cast<const char *>(spirvBlob->GetBufferPointer()), spirvBlob->GetBufferSize());
+		ofs.close();
 		vk::ShaderModuleCreateInfo shaderModuleInfo({}, spirvBlob->GetBufferSize(),
 													reinterpret_cast<const uint32_t *>(spirvBlob->GetBufferPointer()));
+#else	  // NDEBUG
+		auto it = g_shaders.find(cacheFileName);
+		if (it == g_shaders.end()) {
+			dbLog(dbg::LOG_ERROR, "Shader cache not found for: ", cacheFileName);
+			THROW_RUNTIME_ERR(std::format("Shader cache not found for: {}", cacheFileName));
+		}
+		auto					  &shaderdata = it->second;
+		vk::ShaderModuleCreateInfo shaderModuleInfo({}, shaderdata.length,
+													reinterpret_cast<const uint32_t *>(shaderdata.data));
+#endif
+
 		shaderModules.emplace_back(device, shaderModuleInfo);
 
 		vk::PipelineShaderStageCreateInfo shaderStageInfo({}, stage, *shaderModules.back(),

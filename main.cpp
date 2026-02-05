@@ -24,10 +24,8 @@ int main() {
 	auto &win		= window.getNativeWindow();
 	win->clearColor = glm::vec4(30 / 255.f, 30 / 255.f, 46 / 255.f, 1.0f);
 
-	// std::string_view fontPath = "/usr/share/fonts/TTF/HackNerdFontMono-Regular.ttf";
-	//std::string_view fontPath = "/usr/local/share/fonts/f/FantasqueSansMNerdFont_Regular.ttf";
-	// std::string_view fontPath = "/usr/share/fonts/gsfonts/StandardSymbolsPS.otf";
 	std::string fontPath = Font::getDefaultSystemFontPath();
+	dbLog(dbg::LOG_INFO, "Using font: %s", fontPath.c_str());
 
 	auto font = Font(*nri, window.getMainQueue(), fontPath.data(), 512);
 
@@ -36,8 +34,8 @@ int main() {
 
 	auto sb		= nri->createProgramBuilder();
 	auto shader = sb->addShaderModule(
-						nri::ShaderCreateInfo{PROJECT_ROOT_DIR "/shaders/text.hlsl", "VSMain", nri::SHADER_TYPE_VERTEX})
-					  .addShaderModule(nri::ShaderCreateInfo{PROJECT_ROOT_DIR "/shaders/text.hlsl", "PSMain",
+						nri::ShaderCreateInfo{"shaders/text.hlsl", "VSMain", nri::SHADER_TYPE_VERTEX})
+					  .addShaderModule(nri::ShaderCreateInfo{"shaders/text.hlsl", "PSMain",
 															 nri::SHADER_TYPE_FRAGMENT})
 					  .setVertexBindings(mesh->getVertexBindings())
 					  .setPrimitiveType(nri::PRIMITIVE_TYPE_TRIANGLES)

@@ -7,15 +7,32 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wpedantic -fno-omit-frame-pointer -O3 -std=c++20")
 
+file(GLOB SOURCE_FILES src/*.cpp)
+
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
     message("Debug build")
     set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -g")
 else()
     message("Release build")
     set(CMAKE_LINKER_FLAGS  "${CMAKE_LINKER_FLAGS} -static-libgcc -static-libstdc++ --static -s")
+
+
+	file(GLOB SHADER_FILES "${CMAKE_CURRENT_SOURCE_DIR}/shadercache/*.spv")
+	find_package(Python3 REQUIRED COMPONENTS Interpreter)
+	add_custom_command(
+	    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/shader_registry.cpp
+	    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/gen_shader_registry.py 
+	            > ${CMAKE_CURRENT_BINARY_DIR}/shader_registry.cpp
+	    DEPENDS ${SHADER_FILES} ${CMAKE_CURRENT_SOURCE_DIR}/gen_shader_registry.py
+	    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+	    COMMENT "Generating shader registry..."
+	)
+	set(SOURCE_FILES 
+		${SOURCE_FILES}
+		${CMAKE_CURRENT_BINARY_DIR}/shader_registry.cpp
+	)
 endif()
 
-file(GLOB SOURCE_FILES src/*.cpp)
 
 
 if (UNIX)
@@ -23,7 +40,6 @@ if (UNIX)
 else()
     find_package (Vulkan REQUIRED)
 endif()
-
 
 add_subdirectory(lib/glfw EXCLUDE_FROM_ALL)
 add_subdirectory(lib/glm EXCLUDE_FROM_ALL)
@@ -54,6 +70,7 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
     # path to the root directory of the project
-    PROJECT_ROOT_DIR="${CMAKE_SOURCE_DIR}/"
- DBG_LOG_LEVEL=-1
+	#PROJECT_ROOT_DIR="${CMAKE_SOURCE_DIR}/"
+	DBG_LOG_LEVEL=-1
 )
+

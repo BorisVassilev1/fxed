@@ -1,5 +1,6 @@
 fxed
 fxed.exe
 build
-build-win
+build-*
+shadercache
 .cache
