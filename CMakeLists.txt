@@ -22,6 +22,11 @@ if (UNIX)
     find_package (Vulkan REQUIRED dxc)
 else()
     find_package (Vulkan REQUIRED)
+    # Find FreeType dependencies needed for static linking on Windows
+    find_package(PNG REQUIRED)
+    find_package(ZLIB REQUIRED)
+    find_package(BZip2 REQUIRED)
+    find_package(harfbuzz REQUIRED)
 endif()
 
 
@@ -35,6 +40,10 @@ if (UNIX)
 	target_link_libraries(${PROJECT_NAME} PRIVATE Vulkan::dxc_lib fontconfig)
 else ()
     target_link_libraries(${PROJECT_NAME} PRIVATE $ENV{VULKAN_SDK}/Lib/dxcompiler.lib)
+    # Link FreeType dependencies for Windows static builds
+    target_link_libraries(${PROJECT_NAME} PRIVATE PNG::PNG ZLIB::ZLIB BZip2::BZip2 harfbuzz::harfbuzz)
+    # Additional system libraries that may be needed
+    target_link_libraries(${PROJECT_NAME} PRIVATE brotlicommon brotlidec)
 endif ()
 target_include_directories(${PROJECT_NAME} PRIVATE include)
 target_link_libraries(${PROJECT_NAME} PRIVATE glfw)
