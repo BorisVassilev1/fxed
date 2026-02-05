@@ -104,10 +104,48 @@ jobs:
           # Also set CMAKE_PREFIX_PATH to help CMake find libraries
           echo "CMAKE_PREFIX_PATH=$mingwPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           Write-Host "CMAKE_PREFIX_PATH set to $mingwPath"
+
+      - name: Debug FreeType installation (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          Write-Host "=== Checking FreeType installation ==="
+          # Check for FreeType in common MSYS2 locations
+          $locations = @(
+            "C:\tools\msys64\mingw64",
+            "C:\msys64\mingw64"
+          )
+          foreach ($loc in $locations) {
+            if (Test-Path $loc) {
+              Write-Host "Checking $loc"
+              if (Test-Path "$loc\include\freetype2") { Write-Host "  Found: $loc\include\freetype2" }
+              if (Test-Path "$loc\lib\libfreetype.a") { Write-Host "  Found: $loc\lib\libfreetype.a" }
+              if (Test-Path "$loc\lib\libfreetype.dll.a") { Write-Host "  Found: $loc\lib\libfreetype.dll.a" }
+              if (Test-Path "$loc\lib\pkgconfig\freetype2.pc") { Write-Host "  Found: $loc\lib\pkgconfig\freetype2.pc" }
+              if (Test-Path "$loc\bin\libfreetype-6.dll") { Write-Host "  Found: $loc\bin\libfreetype-6.dll" }
+            }
+          }
+          Write-Host "PKG_CONFIG_PATH = $env:PKG_CONFIG_PATH"
+          Write-Host "CMAKE_PREFIX_PATH = $env:CMAKE_PREFIX_PATH"
+
+      - name: Configure (Windows - MSYS2 Mingw + Ninja)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          # Determine MSYS2 mingw64 path
+          if (Test-Path 'C:\tools\msys64\mingw64') {
+            $mingwPath = 'C:\tools\msys64\mingw64'
+          } else {
+            $mingwPath = 'C:\msys64\mingw64'
+          }
           # Modify configure.bat to use the build_type from matrix and standardize build directory to 'build'
           (Get-Content configure.bat) `
             -replace '-DCMAKE_BUILD_TYPE=Release', "-DCMAKE_BUILD_TYPE=${{ matrix.build_type }}" `
             -replace 'build-win', 'build' | Set-Content configure_ci.bat
+          # Append FreeType CMake hints to help find the library
+          Add-Content configure_ci.bat "`t-DFREETYPE_INCLUDE_DIR_freetype2=`"$mingwPath/include/freetype2`" ^"
+          Add-Content configure_ci.bat "`t-DFREETYPE_INCLUDE_DIR_ft2build=`"$mingwPath/include/freetype2`" ^"
+          Add-Content configure_ci.bat "`t-DFREETYPE_LIBRARY=`"$mingwPath/lib/libfreetype.a`""
           # Run the configure script
           cmd /c configure_ci.bat
 
