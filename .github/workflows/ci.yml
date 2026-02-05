@@ -59,7 +59,7 @@ jobs:
             $msysbash = 'C:\tools\msys64\usr\bin\bash.exe'
           }
           & $msysbash -lc "pacman -Syu --noconfirm"
-          & $msysbash -lc "pacman -S --noconfirm mingw-w64-x86_64-toolchain mingw-w64-x86_64-clang mingw-w64-x86_64-ninja mingw-w64-x86_64-cmake mingw-w64-x86_64-pkg-config mingw-w64-x86_64-fontconfig mingw-w64-x86_64-freetype mingw-w64-x86_64-libpng mingw-w64-x86_64-zlib mingw-w64-x86_64-bzip2 mingw-w64-x86_64-brotli mingw-w64-x86_64-harfbuzz"
+          & $msysbash -lc "pacman -S --noconfirm mingw-w64-clang-x86_64-toolchain mingw-w64-clang-x86_64-clang mingw-w64-clang-x86_64-ninja mingw-w64-clang-x86_64-cmake mingw-w64-clang-x86_64-pkg-config mingw-w64-clang-x86_64-fontconfig mingw-w64-clang-x86_64-freetype mingw-w64-clang-x86_64-libpng mingw-w64-clang-x86_64-zlib mingw-w64-clang-x86_64-bzip2 mingw-w64-clang-x86_64-brotli mingw-w64-clang-x86_64-harfbuzz"
 
       - name: Install runtime/development deps (Linux)
         if: matrix.os == 'ubuntu-latest'
@@ -85,17 +85,17 @@ jobs:
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          Write-Host 'Attempting to add MSYS2 mingw64 to PATH so gcc/g++/ninja are available'
+          Write-Host 'Attempting to add MSYS2 clang64 to PATH so clang/clang++/ninja are available'
           $mingwPath = ''
-          if (Test-Path 'C:\tools\msys64\mingw64\bin') {
-            echo 'C:\tools\msys64\mingw64\bin' | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-            $mingwPath = 'C:\tools\msys64\mingw64'
-          } elseif (Test-Path 'C:\msys64\mingw64\bin') {
-            echo 'C:\msys64\mingw64\bin' | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-            $mingwPath = 'C:\msys64\mingw64'
+          if (Test-Path 'C:\tools\msys64\clang64\bin') {
+            echo 'C:\tools\msys64\clang64\bin' | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+            $mingwPath = 'C:\tools\msys64\clang64'
+          } elseif (Test-Path 'C:\msys64\clang64\bin') {
+            echo 'C:\msys64\clang64\bin' | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+            $mingwPath = 'C:\msys64\clang64'
           } else {
-            Write-Host 'MSYS2 mingw64 bin not found in common locations; ensure MSYS2 pacman installed the mingw packages.'
-            $mingwPath = 'C:\tools\msys64\mingw64'
+            Write-Host 'MSYS2 clang64 bin not found in common locations; ensure MSYS2 pacman installed the clang packages.'
+            $mingwPath = 'C:\tools\msys64\clang64'
           }
           # Set PKG_CONFIG_PATH to help CMake find FreeType and other libraries
           $pkgConfigPath = "$mingwPath\lib\pkgconfig"
@@ -112,8 +112,8 @@ jobs:
           Write-Host "=== Checking FreeType installation ==="
           # Check for FreeType in common MSYS2 locations
           $locations = @(
-            "C:\tools\msys64\mingw64",
-            "C:\msys64\mingw64"
+            "C:\tools\msys64\clang64",
+            "C:\msys64\clang64"
           )
           foreach ($loc in $locations) {
             if (Test-Path $loc) {
@@ -132,11 +132,11 @@ jobs:
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          # Determine MSYS2 mingw64 path
-          if (Test-Path 'C:\tools\msys64\mingw64') {
-            $mingwPath = 'C:\tools\msys64\mingw64'
+          # Determine MSYS2 clang64 path
+          if (Test-Path 'C:\tools\msys64\clang64') {
+            $mingwPath = 'C:\tools\msys64\clang64'
           } else {
-            $mingwPath = 'C:\msys64\mingw64'
+            $mingwPath = 'C:\msys64\clang64'
           }
           # Modify configure.bat to use the build_type from matrix and standardize build directory to 'build'
           (Get-Content configure.bat) `
