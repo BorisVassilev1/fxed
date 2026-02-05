@@ -24,7 +24,7 @@ jobs:
           submodules: recursive
 
       - name: Install Vulkan SDK
-        if: matrix.os == 'ubuntu-latest'
+        #if: matrix.os == 'ubuntu-latest'
         uses: jakoch/install-vulkan-sdk-action@v1
         with:
           vulkan_version: ${{ env.VULKAN_SDK_VERSION }}
@@ -70,29 +70,6 @@ jobs:
           # Wayland development packages for GLFW
           sudo apt-get install -y libwayland-dev libxkbcommon-dev wayland-protocols
         shell: bash
-
-      - name: Install Vulkan SDK (Windows)
-        if: matrix.os == 'windows-latest'
-        shell: pwsh
-        run: |
-          # Try installing Vulkan SDK via Chocolatey (may install the latest if exact version isn't available)
-          choco install -y vulkan-sdk --version=$env:VULKAN_SDK_VERSION || choco install -y vulkan-sdk || Write-Host "vulkan-sdk install via choco failed; runner may already have SDK or rely on system drivers"
-          # Common default location for LunarG on Windows; if present, expose it to the job environment
-          $default = "C:\VulkanSDK\$($env:VULKAN_SDK_VERSION)"
-          if (Test-Path $default) {
-            # Check for dxcompiler import lib which is what CMake expects to link on Windows
-            $dxpath = Join-Path $default 'Lib\dxcompiler.lib'
-            if (Test-Path $dxpath) {
-              echo "VULKAN_SDK=$default" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-              Write-Host "dxcompiler.lib found at $dxpath; VULKAN_SDK set to $default"
-            } else {
-              # Still export VULKAN_SDK (useful for loaders/headers), but warn about missing import lib
-              echo "VULKAN_SDK=$default" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-              Write-Host "VULKAN_SDK set to $default but dxcompiler.lib was NOT found at $dxpath. Linking with mingw toolchains may fail; consider using clang-cl/MSVC toolchain or provide a MinGW-compatible import lib or dynamic-load dxcompiler.dll."
-            }
-          } else {
-            Write-Host "VULKAN_SDK default path not found; if build requires dxcompiler.lib ensure VULKAN_SDK is available on the runner."
-          }
 
       - name: Configure (Linux)
         if: matrix.os == 'ubuntu-latest'
