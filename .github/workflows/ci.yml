@@ -86,13 +86,24 @@ jobs:
         shell: pwsh
         run: |
           Write-Host 'Attempting to add MSYS2 mingw64 to PATH so gcc/g++/ninja are available'
+          $mingwPath = ''
           if (Test-Path 'C:\tools\msys64\mingw64\bin') {
             echo 'C:\tools\msys64\mingw64\bin' | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+            $mingwPath = 'C:\tools\msys64\mingw64'
           } elseif (Test-Path 'C:\msys64\mingw64\bin') {
             echo 'C:\msys64\mingw64\bin' | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+            $mingwPath = 'C:\msys64\mingw64'
           } else {
             Write-Host 'MSYS2 mingw64 bin not found in common locations; ensure MSYS2 pacman installed the mingw packages.'
+            $mingwPath = 'C:\tools\msys64\mingw64'
           }
+          # Set PKG_CONFIG_PATH to help CMake find FreeType and other libraries
+          $pkgConfigPath = "$mingwPath\lib\pkgconfig"
+          echo "PKG_CONFIG_PATH=$pkgConfigPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "PKG_CONFIG_PATH set to $pkgConfigPath"
+          # Also set CMAKE_PREFIX_PATH to help CMake find libraries
+          echo "CMAKE_PREFIX_PATH=$mingwPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "CMAKE_PREFIX_PATH set to $mingwPath"
           # Modify configure.bat to use the build_type from matrix and standardize build directory to 'build'
           (Get-Content configure.bat) `
             -replace '-DCMAKE_BUILD_TYPE=Release', "-DCMAKE_BUILD_TYPE=${{ matrix.build_type }}" `
