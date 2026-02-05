@@ -15,7 +15,7 @@ jobs:
 
     env:
       # Keep a default Vulkan SDK version to try to download when a packaged SDK isn't available.
-      VULKAN_SDK_VERSION: 1.3.250.0
+      VULKAN_SDK_VERSION: 1.3.275
 
     steps:
       - name: Checkout
@@ -58,6 +58,7 @@ jobs:
           sudo apt-get install -y dxc || true
 
           # Try to download and expose LunarG Vulkan SDK if available (not required but helps linkers)
+          # Try to download and expose LunarG Vulkan SDK (includes dxcompiler) if available
           SDK_TGZ="vulkansdk-linux-x86_64-${VULKAN_SDK_VERSION}.tar.gz"
           SDK_URL="https://sdk.lunarg.com/sdk/download/${VULKAN_SDK_VERSION}/linux/${SDK_TGZ}"
           echo "Attempting to download Vulkan SDK from ${SDK_URL}"
@@ -68,6 +69,12 @@ jobs:
             echo "VULKAN_SDK=${VULKAN_SDK_DIR}" >> $GITHUB_ENV
             echo "PATH=${VULKAN_SDK_DIR}/bin:${PATH}" >> $GITHUB_ENV
             echo "SDK downloaded and VULKAN_SDK set to ${VULKAN_SDK_DIR}"
+            # Verify presence of dxcompiler in the extracted SDK so CMake's FindVulkan(DXC) can succeed
+            if [ -f "${VULKAN_SDK_DIR}/lib/libdxcompiler.so" ] || [ -f "${VULKAN_SDK_DIR}/lib/dxcompiler.so" ] || [ -f "${VULKAN_SDK_DIR}/lib64/libdxcompiler.so" ]; then
+              echo "dxcompiler found in SDK: linking with dxc should succeed."
+            else
+              echo "Warning: dxcompiler not found in SDK (${VULKAN_SDK_DIR}/lib). CMake find_package(Vulkan dxc) may fail. If this happens, try another SDK version or install dxc separately."
+            fi
           else
             echo "Could not download LunarG SDK; build will rely on system Vulkan packages."
           fi
@@ -82,8 +89,16 @@ jobs:
           # Common default location for LunarG on Windows; if present, expose it to the job environment
           $default = "C:\VulkanSDK\$($env:VULKAN_SDK_VERSION)"
           if (Test-Path $default) {
-            echo "VULKAN_SDK=$default" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-            echo "Added VULKAN_SDK to environment: $default"
+            # Check for dxcompiler import lib which is what CMake expects to link on Windows
+            $dxpath = Join-Path $default 'Lib\dxcompiler.lib'
+            if (Test-Path $dxpath) {
+              echo "VULKAN_SDK=$default" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+              Write-Host "dxcompiler.lib found at $dxpath; VULKAN_SDK set to $default"
+            } else {
+              # Still export VULKAN_SDK (useful for loaders/headers), but warn about missing import lib
+              echo "VULKAN_SDK=$default" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+              Write-Host "VULKAN_SDK set to $default but dxcompiler.lib was NOT found at $dxpath. Linking with mingw toolchains may fail; consider using clang-cl/MSVC toolchain or provide a MinGW-compatible import lib or dynamic-load dxcompiler.dll."
+            }
           } else {
             Write-Host "VULKAN_SDK default path not found; if build requires dxcompiler.lib ensure VULKAN_SDK is available on the runner."
           }
@@ -92,7 +107,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           mkdir -p build
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DVULKAN_SDK=${VULKAN_SDK}
         shell: bash
 
       - name: Configure (Windows - MSYS2 Mingw/Clang + Ninja)
@@ -109,7 +124,7 @@ jobs:
             Write-Host 'MSYS2 mingw64 bin not found in common locations; ensure MSYS2 pacman installed the mingw packages.'
           }
           # Configure with Ninja generator and use clang from the mingw toolchain
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DVULKAN_SDK="$env:VULKAN_SDK" -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
 
       - name: Build
         run: |
