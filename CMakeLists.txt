@@ -14,7 +14,7 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug")
     set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -g")
 else()
     message("Release build")
-    set(CMAKE_LINKER_FLAGS  "${CMAKE_LINKER_FLAGS} -static-libgcc -static-libstdc++ --static -s")
+    set(CMAKE_LINKER_FLAGS  "${CMAKE_LINKER_FLAGS} -static-libgcc -static-libstdc++ -static-libc++ --static -s")
 
 
 	file(GLOB SHADER_FILES "${CMAKE_CURRENT_SOURCE_DIR}/shadercache/*.spv")
