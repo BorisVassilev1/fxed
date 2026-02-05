@@ -44,21 +44,17 @@ target_link_libraries(${PROJECT_NAME} PRIVATE msdf-atlas-gen)
 # On Windows, explicitly link FreeType dependencies after msdf-atlas-gen
 # This is needed for static linking where dependencies aren't automatically propagated
 if (NOT UNIX)
-    # Force static linking using -Bstatic flag
-    target_link_options(${PROJECT_NAME} PRIVATE 
-        "LINKER:-Bstatic"
-    )
+    # Force static linking by explicitly wrapping libraries with -Bstatic/-Bdynamic
     target_link_libraries(${PROJECT_NAME} PRIVATE
-        freetype
-        harfbuzz
-        png
-        brotlidec
-        brotlicommon
-        z
-        bz2
-    )
-    target_link_options(${PROJECT_NAME} PRIVATE 
-        "LINKER:-Bdynamic"
+        -Wl,-Bstatic
+        -lfreetype
+        -lharfbuzz
+        -lpng
+        -lbrotlidec
+        -lbrotlicommon
+        -lz
+        -lbz2
+        -Wl,-Bdynamic
     )
 endif()
 
