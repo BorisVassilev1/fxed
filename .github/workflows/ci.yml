@@ -124,9 +124,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: f xed-binaries-${{ matrix.os }}-${{ matrix.build_type }}
-          path: artifact-list.txt
-          # We'll also try to upload common locations so at least one will be present
+          # Provide multiple candidate paths (artifact-list.txt plus common binary locations).
           path: |
+            artifact-list.txt
             fxed
             fxed.exe
             build/fxed
