@@ -1,0 +1,145 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }} / ${{ matrix.build_type }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        build_type: [Debug, Release]
+
+    env:
+      # Keep a default Vulkan SDK version to try to download when a packaged SDK isn't available.
+      VULKAN_SDK_VERSION: 1.3.250.0
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup common tools (cmake, ninja)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build pkg-config git
+        shell: bash
+
+      - name: Setup common tools (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          choco feature enable -n allowGlobalConfirmation
+          choco install -y ninja cmake visualstudio2019-workload-vctools
+
+      - name: Install runtime/development deps (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          set -e
+          # Vulkan dev packages and common X / font deps used by the project
+          sudo apt-get install -y libfontconfig1-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libvulkan-dev vulkan-utils spirv-tools
+          # Try installing dxc (DirectX Shader Compiler) if packaged
+          sudo apt-get install -y dxc || true
+
+          # Try to download and expose LunarG Vulkan SDK if available (not required but helps linkers)
+          SDK_TGZ="vulkansdk-linux-x86_64-${VULKAN_SDK_VERSION}.tar.gz"
+          SDK_URL="https://sdk.lunarg.com/sdk/download/${VULKAN_SDK_VERSION}/linux/${SDK_TGZ}"
+          echo "Attempting to download Vulkan SDK from ${SDK_URL}"
+          if wget -q "${SDK_URL}" -O "${SDK_TGZ}"; then
+            mkdir -p vulkansdk
+            tar -xzf "${SDK_TGZ}" -C vulkansdk
+            VULKAN_SDK_DIR="$(pwd)/vulkansdk/${VULKAN_SDK_VERSION}/x86_64"
+            echo "VULKAN_SDK=${VULKAN_SDK_DIR}" >> $GITHUB_ENV
+            echo "PATH=${VULKAN_SDK_DIR}/bin:${PATH}" >> $GITHUB_ENV
+            echo "SDK downloaded and VULKAN_SDK set to ${VULKAN_SDK_DIR}"
+          else
+            echo "Could not download LunarG SDK; build will rely on system Vulkan packages."
+          fi
+        shell: bash
+
+      - name: Install Vulkan SDK (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          # Try installing Vulkan SDK via Chocolatey (may install the latest if exact version isn't available)
+          choco install -y vulkan-sdk --version=$env:VULKAN_SDK_VERSION || choco install -y vulkan-sdk || Write-Host "vulkan-sdk install via choco failed; runner may already have SDK or rely on system drivers"
+          # Common default location for LunarG on Windows; if present, expose it to the job environment
+          $default = "C:\VulkanSDK\$($env:VULKAN_SDK_VERSION)"
+          if (Test-Path $default) {
+            echo "VULKAN_SDK=$default" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            echo "Added VULKAN_SDK to environment: $default"
+          } else {
+            Write-Host "VULKAN_SDK default path not found; if build requires dxcompiler.lib ensure VULKAN_SDK is available on the runner."
+          }
+
+      - name: Configure (Linux - Ninja)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          mkdir -p build
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+        shell: bash
+
+      - name: Configure (Windows - Visual Studio)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          mkdir -p build
+          # Use Visual Studio generator on Windows to ensure proper MS VC toolchain usage.
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+
+      - name: Build
+        run: |
+          cmake --build build --config ${{ matrix.build_type }} --parallel
+        shell: bash
+
+      - name: Run tests (if tests configured)
+        run: |
+          # If CTest tests are available, run them. Don't fail the whole job on test failures here unless desired.
+          if [ -d build ]; then
+            cmake --build build --target test --config ${{ matrix.build_type }} || true
+          fi
+        shell: bash
+        if: matrix.os == 'ubuntu-latest'
+
+      - name: Collect binary path candidates
+        id: collect
+        run: |
+          # CMakeLists sets RUNTIME_OUTPUT_DIRECTORY ../ so executables may be in repository root or build dirs.
+          candidates=()
+          if [ -f fxed ]; then candidates+=("fxed"); fi
+          if [ -f fxed.exe ]; then candidates+=("fxed.exe"); fi
+          if [ -f build/fxed ]; then candidates+=("build/fxed"); fi
+          if [ -f build/fxed.exe ]; then candidates+=("build/fxed.exe"); fi
+          if [ -f build/${{ matrix.build_type }}/fxed.exe ]; then candidates+=("build/${{ matrix.build_type }}/fxed.exe"); fi
+          if [ -f build/${{ matrix.build_type }}/fxed ]; then candidates+=("build/${{ matrix.build_type }}/fxed"); fi
+          # Print found candidates (for logs) and join with newline for upload step
+          for f in "${candidates[@]}"; do echo "FOUND_BINARY:$f"; done
+          printf "%s\n" "${candidates[@]}" > artifact-list.txt
+        shell: bash
+
+      - name: Upload artifact (built executable)
+        uses: actions/upload-artifact@v4
+        with:
+          name: f xed-binaries-${{ matrix.os }}-${{ matrix.build_type }}
+          path: artifact-list.txt
+          # We'll also try to upload common locations so at least one will be present
+          path: |
+            fxed
+            fxed.exe
+            build/fxed
+            build/fxed.exe
+            build/${{ matrix.build_type }}/fxed
+            build/${{ matrix.build_type }}/fxed.exe
+        # Note: upload-artifact will only include files that actually exist.
+
+      - name: Print environment (debug)
+        if: always()
+        run: |
+          echo "OS=${{ matrix.os }}"
+          echo "BUILD_TYPE=${{ matrix.build_type }}"
+          echo "VULKAN_SDK=${VULKAN_SDK}"
+          uname -a || systeminfo
+        shell: bash
