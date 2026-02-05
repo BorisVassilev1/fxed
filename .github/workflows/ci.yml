@@ -21,13 +21,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Vulkan SDK
+      - name: Install Vulkan SDK
         if: matrix.os == 'ubuntu-latest'
-        uses: humbletim/setup-vulkan-sdk@v1.2.0
+        uses: humbletim/install-vulkan-sdk@v1.2
         with:
-          vulkan-query-version: ${{ env.VULKAN_SDK_VERSION }}
-          vulkan-components: Vulkan-Headers, Vulkan-Loader, SPIRV-Tools, Glslang, shaderc
-          vulkan-use-cache: true
+          version: ${{ env.VULKAN_SDK_VERSION }}
+          cache: true
 
       - name: Setup common tools (cmake, ninja)
         if: matrix.os == 'ubuntu-latest'
