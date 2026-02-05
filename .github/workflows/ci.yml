@@ -94,19 +94,21 @@ jobs:
             Write-Host "VULKAN_SDK default path not found; if build requires dxcompiler.lib ensure VULKAN_SDK is available on the runner."
           }
 
-      - name: Configure (Linux - Ninja)
+      - name: Configure (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: |
-          mkdir -p build
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DVULKAN_SDK=${VULKAN_SDK}
+          chmod +x configure.sh
+          # Modify configure.sh to use the build_type from matrix
+          sed "s/-DCMAKE_BUILD_TYPE=Release/-DCMAKE_BUILD_TYPE=${{ matrix.build_type }}/g" configure.sh > configure_ci.sh
+          chmod +x configure_ci.sh
+          ./configure_ci.sh
         shell: bash
 
-      - name: Configure (Windows - MSYS2 Mingw/Clang + Ninja)
+      - name: Configure (Windows - MSYS2 Mingw + Ninja)
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          if (!(Test-Path 'build')) { New-Item -ItemType Directory -Path 'build' | Out-Null }
-          Write-Host 'Attempting to add MSYS2 mingw64 to PATH so clang/ninja are available'
+          Write-Host 'Attempting to add MSYS2 mingw64 to PATH so gcc/g++/ninja are available'
           if (Test-Path 'C:\tools\msys64\mingw64\bin') {
             echo 'C:\tools\msys64\mingw64\bin' | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           } elseif (Test-Path 'C:\msys64\mingw64\bin') {
@@ -114,8 +116,12 @@ jobs:
           } else {
             Write-Host 'MSYS2 mingw64 bin not found in common locations; ensure MSYS2 pacman installed the mingw packages.'
           }
-          # Configure with Ninja generator and use clang from the mingw toolchain
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DVULKAN_SDK="$env:VULKAN_SDK" -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+          # Modify configure.bat to use the build_type from matrix and standardize build directory to 'build'
+          (Get-Content configure.bat) `
+            -replace '-DCMAKE_BUILD_TYPE=Release', "-DCMAKE_BUILD_TYPE=${{ matrix.build_type }}" `
+            -replace 'build-win', 'build' | Set-Content configure_ci.bat
+          # Run the configure script
+          cmd /c configure_ci.bat
 
       - name: Build
         run: |
@@ -144,13 +150,13 @@ jobs:
           if [ -f build/${{ matrix.build_type }}/fxed ]; then candidates+=("build/${{ matrix.build_type }}/fxed"); fi
           # Print found candidates (for logs) and join with newline for upload step
           for f in "${candidates[@]}"; do echo "FOUND_BINARY:$f"; done
-          printf "%s\n" "${candidates[@]}" > artifact-list.txt
+          printf "%s\n" "${candidates[@]}" > artifact-list.txt || echo "No binaries found"
         shell: bash
 
       - name: Upload artifact (built executable)
         uses: actions/upload-artifact@v4
         with:
-          name: f xed-binaries-${{ matrix.os }}-${{ matrix.build_type }}
+          name: fxed-binaries-${{ matrix.os }}-${{ matrix.build_type }}
           # Provide multiple candidate paths (artifact-list.txt plus common binary locations).
           path: |
             artifact-list.txt
