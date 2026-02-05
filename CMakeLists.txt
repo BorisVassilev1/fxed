@@ -45,17 +45,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE msdf-atlas-gen)
 # This is needed for static linking where dependencies aren't automatically propagated
 if (NOT UNIX)
     # Force static linking by explicitly wrapping libraries with -Bstatic/-Bdynamic
-    target_link_libraries(${PROJECT_NAME} PRIVATE
-        -Wl,-Bstatic
-        -lfreetype
-        -lharfbuzz
-        -lpng
-        -lbrotlidec
-        -lbrotlicommon
-        -lz
-        -lbz2
-        -Wl,-Bdynamic
-    )
+    target_link_libraries(${PROJECT_NAME} PRIVATE freetype png bz2)
 endif()
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
