@@ -6,10 +6,10 @@
 #ifdef _WIN32
 	#define NOMINMAX
 	#include <wrl.h>
-	// #include <dxcapi.h>
+	#include <dxcapi.h>
 	#define CComPtr Microsoft::WRL::ComPtr
 	#undef MemoryBarrier
-	#include <dxc/dxcapi.h>
+	//#include <dxc/dxcapi.h>
 #else
 	#include <dxc/dxcapi.h>
 #endif

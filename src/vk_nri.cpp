@@ -8,7 +8,9 @@
 #include <vulkan/vulkan_raii.hpp>
 #include <vulkan/vulkan_core.h>
 #ifdef _WIN32
-// #pragma comment(lib, "dxcompiler.lib")
+#include <wrl.h>
+#include <dxcapi.h>
+#pragma comment(lib, "dxcompiler.lib")
 #else
 	#include <dxc/dxcapi.h>
 #endif
@@ -18,7 +20,11 @@
 #include "nri.hpp"
 
 namespace nri {
-static const std::vector<const char *> validationLayers = {"VK_LAYER_KHRONOS_validation"};
+static const std::vector<const char *> validationLayers = {
+#ifndef NDEBUG
+	"VK_LAYER_KHRONOS_validation"
+#endif
+};
 
 #ifdef NDEBUG
 static const bool enableValidationLayers = false;

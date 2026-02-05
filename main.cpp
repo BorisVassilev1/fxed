@@ -25,7 +25,8 @@ int main() {
 	win->clearColor = glm::vec4(30 / 255.f, 30 / 255.f, 46 / 255.f, 1.0f);
 
 	// std::string_view fontPath = "/usr/share/fonts/TTF/HackNerdFontMono-Regular.ttf";
-	std::string_view fontPath = "/usr/local/share/fonts/f/FantasqueSansMNerdFont_Regular.ttf";
+	//std::string_view fontPath = "/usr/local/share/fonts/f/FantasqueSansMNerdFont_Regular.ttf";
+	std::string_view fontPath = "C:/Windows/Fonts/arial.ttf";
 	// std::string_view fontPath = "/usr/share/fonts/gsfonts/StandardSymbolsPS.otf";
 
 	auto font = Font(*nri, window.getMainQueue(), fontPath.data(), 512);
