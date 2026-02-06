@@ -2,12 +2,31 @@
 
 #include "mesh.hpp"
 #include "buffer_utils.hpp"
+#include "nri.hpp"
 #include "utils.hpp"
 
 namespace fxed {
 Mesh::Mesh(nri::NRI &nri, nri::CommandQueue &q, std::span<float> vertices, std::span<float> texCoords,
 		   std::span<uint32_t> indices) {
 	init(nri, q, vertices, texCoords, indices);
+}
+
+Mesh::Mesh(nri::NRI &nri, std::size_t vertexCount, std::size_t indexCount,
+		   nri::MemoryTypeRequest memoryTypeRequest)
+	: vertexCount(vertexCount), indexCount(indexCount) {
+	initBuffers(nri, vertexCount, indexCount, memoryTypeRequest);
+}
+
+nri::MemoryRequirements Mesh::initBuffers(nri::NRI &nri, std::size_t vertexCount, std::size_t indexCount,
+										  nri::MemoryTypeRequest memoryTypeRequest) {
+	nri::BufferUsage bufferUsage = nri::BUFFER_USAGE_TRANSFER_DST;
+
+	vertexAttributes = nri.createBuffer(vertexCount * (2 + 2) * sizeof(float), nri::BUFFER_USAGE_VERTEX | bufferUsage);
+	indexBuffer		 = nri.createBuffer(indexCount * sizeof(uint32_t), nri::BUFFER_USAGE_INDEX | bufferUsage);
+
+	auto [offsets, memReq] = getBufferOffsets({vertexAttributes.get(), indexBuffer.get()});
+	memory				   = allocateBindMemory(nri, {vertexAttributes.get(), indexBuffer.get()}, memoryTypeRequest);
+	return memReq;
 }
 
 void Mesh::init(nri::NRI &nri, nri::CommandQueue &q, std::span<float> vertices, std::span<float> texCoords,
@@ -32,15 +51,9 @@ void Mesh::init(nri::NRI &nri, nri::CommandQueue &q, std::span<float> vertices, 
 	vertexCount = vertices.size() / 2;
 	indexCount	= indices.size();
 
-	nri::BufferUsage bufferUsage = nri::BUFFER_USAGE_TRANSFER_DST;
+	auto memReq = initBuffers(nri, vertexCount, indexCount, nri::MemoryTypeRequest::MEMORY_TYPE_DEVICE);
 
-	vertexAttributes = nri.createBuffer(vertexCount * (2 + 2) * sizeof(float), nri::BUFFER_USAGE_VERTEX | bufferUsage);
-	indexBuffer		 = nri.createBuffer(indices.size() * sizeof(uint32_t), nri::BUFFER_USAGE_INDEX | bufferUsage);
-
-	auto [offsets, memReq] = getBufferOffsets({vertexAttributes.get(), indexBuffer.get()});
-	memory				   = allocateBindMemory(nri, {vertexAttributes.get(), indexBuffer.get()},
-												nri::MemoryTypeRequest::MEMORY_TYPE_DEVICE);
-
+	assert(memReq.size > 0);
 	auto uploadBuffer		= nri.createBuffer(memReq.size, nri::BUFFER_USAGE_TRANSFER_SRC);
 	auto uploadBufferMemory = allocateBindMemory(nri, {uploadBuffer.get()}, nri::MemoryTypeRequest::MEMORY_TYPE_UPLOAD);
 
@@ -76,7 +89,7 @@ void Mesh::draw(nri::CommandBuffer &cmdBuffer, nri::GraphicsProgram &program) co
 	program.drawIndexed(cmdBuffer, indexCount, 1, 0, 0, 0);
 }
 
-std::vector<nri::VertexBinding> Mesh::getVertexBindings() const {
+std::vector<nri::VertexBinding> Mesh::getVertexBindings() {
 	return {
 		{0,
 		 (2 + 2) * sizeof(float),
@@ -103,12 +116,12 @@ TriangleMesh::TriangleMesh(nri::NRI &nri, nri::CommandQueue &q) : Mesh() {
 	init(nri, q, vertices, texCoords, indices);
 }
 
-QuadMesh::QuadMesh(nri::NRI &nri, nri::CommandQueue &q, float size) {
+QuadMesh::QuadMesh(nri::NRI &nri, nri::CommandQueue &q, glm::vec2 size) {
 	std::vector<float> vertices = {
-		-size / 2, size / 2,	  // Vertex 1 Position
-		-size / 2, -size / 2,	  // Vertex 2 Position
-		size / 2,  -size / 2,	  // Vertex 3 Position
-		size / 2,  size / 2,	  // Vertex 4 Position
+		-size.x / 2, size.y / 2,	  // Vertex 1 Position
+		-size.x / 2, -size.y / 2,	  // Vertex 2 Position
+		size.x / 2,  -size.y / 2,	  // Vertex 3 Position
+		size.x / 2,  size.y / 2,	  // Vertex 4 Position
 	};
 
 	std::vector<float> texCoords = {

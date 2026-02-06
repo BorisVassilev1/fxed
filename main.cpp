@@ -1,20 +1,34 @@
+#include <GLFW/glfw3.h>
 #include <iostream>
 
+#include <fstream>
+
+#include "GLFW/glfw3.h"
 #include "font.hpp"
 #include "input.hpp"
 #include "mesh.hpp"
 #include "nri.hpp"
 #include "nriFactory.hpp"
 #include "glfw_window.hpp"
+#include "text_editor.hpp"
+#include "text_rendering.hpp"
 
 struct PushConstants {
-	glm::vec2			translate;
-	glm::vec2			scale;
+	glm::ivec2			viewportSize;
+	glm::ivec2			translation = {0, 0};
 	nri::ResourceHandle textureHandle;
-	float textSize = 24.0f;
+	float				textSize = 24.0f;
 };
 
-int main() {
+struct PushConstantsCursor {
+	glm::ivec2 viewportSize;
+	glm::ivec2 translation = {0, 0};
+	glm::vec2 cursorPos;
+	float	   textSize;
+	float time;
+};
+
+int main(int argc, char *argv[]) {
 	auto nri = nri::Factory::getInstance().createNRI("Vulkan", nri::CreateBits::GLFW);
 
 	fxed::Window window(*nri, 800, 600, "Vulkan NRI Window");
@@ -24,89 +38,56 @@ int main() {
 	auto &win		= window.getNativeWindow();
 	win->clearColor = glm::vec4(30 / 255.f, 30 / 255.f, 46 / 255.f, 1.0f);
 
-	std::string fontPath = Font::getDefaultSystemFontPath();
+	std::string fontPath = fxed::Font::getDefaultSystemFontPath();
 	dbLog(dbg::LOG_INFO, "Using font: %s", fontPath.c_str());
 
-	auto font = Font(*nri, window.getMainQueue(), fontPath.data(), 512);
+	auto font = fxed::Font(*nri, window.getMainQueue(), fontPath.data(), 512);
 
 	auto textureHandle = font.getHandle();
-	auto mesh		   = std::make_unique<fxed::QuadMesh>(*nri, window.getMainQueue(), 1.0f);
 
 	auto sb		= nri->createProgramBuilder();
-	auto shader = sb->addShaderModule(
-						nri::ShaderCreateInfo{"shaders/text.hlsl", "VSMain", nri::SHADER_TYPE_VERTEX})
-					  .addShaderModule(nri::ShaderCreateInfo{"shaders/text.hlsl", "PSMain",
-															 nri::SHADER_TYPE_FRAGMENT})
-					  .setVertexBindings(mesh->getVertexBindings())
+	auto shader = sb->addShaderModule(nri::ShaderCreateInfo{"shaders/text.hlsl", "VSMain", nri::SHADER_TYPE_VERTEX})
+					  .addShaderModule(nri::ShaderCreateInfo{"shaders/text.hlsl", "PSMain", nri::SHADER_TYPE_FRAGMENT})
+					  .setVertexBindings(fxed::TextMesh::getVertexBindings())
 					  .setPrimitiveType(nri::PRIMITIVE_TYPE_TRIANGLES)
 					  .setPushConstantRanges({{0, sizeof(PushConstants)}})
 					  .buildGraphicsProgram();
 
-	std::vector<float>	  textVertices;
-	std::vector<float>	  textTexCoords;
-	std::vector<uint32_t> textIndices;
-	std::string_view	  text	   = "The quick brown fox jumps over the lazy dog.\nNew line test.";
-	size_t				  offset   = 0;
-	double				  advanceY = 0.0;
-	double				  advance  = 0.0;
+	sb->clearShaderModules();
+	auto cursorShader =
+		sb->addShaderModule(nri::ShaderCreateInfo{"shaders/cursor.hlsl", "VSMain", nri::SHADER_TYPE_VERTEX})
+			.addShaderModule(nri::ShaderCreateInfo{"shaders/cursor.hlsl", "PSMain", nri::SHADER_TYPE_FRAGMENT})
+			.setPushConstantRanges({{0, sizeof(PushConstantsCursor)}})
+			.buildGraphicsProgram();
 
-	const double pixel = 1.0 / 24.0;	 // font size
-	for (size_t i = 0; i < text.size(); i++) {
-		if (text[i] == '\n') {
-			advanceY += 1.0;
-			advance = 0.0;
-			continue;
+	// load argv[1] if exists
+	std::string text;
+	if (argc > 1) {
+		std::ifstream file(argv[1]);
+		if (file.is_open()) {
+			text.assign((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+			file.close();
+		} else {
+			dbLog(dbg::LOG_ERROR, "Failed to open file: %s", argv[1]);
 		}
-
-		auto box = font.getGlyphBox(text[i]);
-		textVertices.push_back(advance + box.bounds.l - pixel);
-		textVertices.push_back(advanceY - box.bounds.t + pixel);
-		textVertices.push_back(advance + box.bounds.l - pixel);
-		textVertices.push_back(advanceY - box.bounds.b + pixel);
-		textVertices.push_back(advance + box.bounds.r - pixel);
-		textVertices.push_back(advanceY - box.bounds.b + pixel);
-		textVertices.push_back(advance + box.bounds.r - pixel);
-		textVertices.push_back(advanceY - box.bounds.t + pixel);
-
-		textIndices.push_back(offset + 0);
-		textIndices.push_back(offset + 1);
-		textIndices.push_back(offset + 2);
-		textIndices.push_back(offset + 2);
-		textIndices.push_back(offset + 3);
-		textIndices.push_back(offset + 0);
-
-		textTexCoords.push_back(box.rect.x + 1);
-		textTexCoords.push_back(box.rect.y + box.rect.h - 1);
-		textTexCoords.push_back(box.rect.x + 1);
-		textTexCoords.push_back(box.rect.y + 1);
-		textTexCoords.push_back(box.rect.x + box.rect.w - 1);
-		textTexCoords.push_back(box.rect.y + 1);
-		textTexCoords.push_back(box.rect.x + box.rect.w - 1);
-		textTexCoords.push_back(box.rect.y + box.rect.h - 1);
-
-		advance += box.advance;
-		offset += 4;
-	}
-	for (auto &v : textTexCoords) {
-		v /= 512.0f;	 // atlas size
 	}
 
-	auto textMesh = std::make_unique<fxed::Mesh>(*nri, window.getMainQueue(), std::span(textVertices),
-												 std::span(textTexCoords), std::span(textIndices));
+	auto				 textMesh = fxed::TextMesh(*nri, window.getMainQueue(), 10000);
+	TextEditor			 textEditor(text);
+	TextEditorController textEditorController(textEditor);
+
+	auto cursorMesh = std::make_unique<fxed::QuadMesh>(*nri, window.getMainQueue(), glm::vec2(0.1, 1.0f));
 
 	PushConstants pushConstants{
-		.translate	   = {-1.0f, 0.0f},
-		.scale		   = {0.2f, 0.2f},
+		.viewportSize  = {window.getWidth(), window.getHeight()},
+		.translation   = {0, 0},
 		.textureHandle = textureHandle,
+		.textSize	   = 24.0f,
 	};
 
-	auto resizeCallback = [&](GLFWwindow *, int w, int h) {
-		float aspect		  = static_cast<float>(w) / static_cast<float>(h);
-		pushConstants.scale.x = pushConstants.scale.y / aspect;
-		pushConstants.textSize = h * pushConstants.scale.y;
-	};
+	auto resizeCallback = [&](GLFWwindow *, int w, int h) { pushConstants.viewportSize = {w, h}; };
 	resizeCallback(nullptr, window.getWidth(), window.getHeight());
-	
+
 	window.addResizeCallback(resizeCallback);
 
 	fxed::Keyboard::addKeyCallback([&](GLFWwindow *window, int key, int, int action, int mods) {
@@ -114,23 +95,26 @@ int main() {
 		if (action == GLFW_PRESS || action == GLFW_REPEAT) {
 			if (mods & GLFW_MOD_CONTROL) {
 				if (key == GLFW_KEY_KP_ADD || key == GLFW_KEY_EQUAL) {
-					pushConstants.scale *= 1.1f;
+					pushConstants.textSize += 1;
 				} else if (key == GLFW_KEY_KP_SUBTRACT || key == GLFW_KEY_MINUS) {
-					pushConstants.scale *= 0.9f;
+					pushConstants.textSize -= 1;
 				}
 			}
+		}
+	});
+	fxed::Mouse mouse(window);
+	fxed::Mouse::addScrollCallback([&](GLFWwindow *, double, double yOffset) {
+		if (fxed::Keyboard::getKey(GLFW_KEY_LEFT_CONTROL) || fxed::Keyboard::getKey(GLFW_KEY_RIGHT_CONTROL)) {
+			pushConstants.textSize += (float)yOffset;
+		} else {
+			pushConstants.translation.y += std::copysign(1.f, yOffset) * 2.0f;
 		}
 	});
 
 	while (!window.shouldClose()) {
 		window.beginFrame();
 
-		// move with wasd
-		if (fxed::Keyboard::getKey(GLFW_KEY_A) == GLFW_PRESS) pushConstants.translate.x += 1.f * window.deltaTime;
-		if (fxed::Keyboard::getKey(GLFW_KEY_D) == GLFW_PRESS) pushConstants.translate.x -= 1.f * window.deltaTime;
-		if (fxed::Keyboard::getKey(GLFW_KEY_W) == GLFW_PRESS) pushConstants.translate.y += 1.f * window.deltaTime;
-		if (fxed::Keyboard::getKey(GLFW_KEY_S) == GLFW_PRESS) pushConstants.translate.y -= 1.f * window.deltaTime;
-
+		win->beginFrame();
 		auto &cmdBuf = win->getCurrentCommandBuffer();
 
 		shader->bind(cmdBuf);
@@ -138,10 +122,32 @@ int main() {
 
 		shader->setPushConstants(cmdBuf, &pushConstants, sizeof(pushConstants), 0);
 
-		textMesh->bind(cmdBuf);
-		textMesh->draw(cmdBuf, *shader);
+		std::string text = textEditor.getText();
+		glm::vec2 cursorRealPos;
+		cursorRealPos = textMesh.updateText(std::span<const char>{text.begin(), text.end()}, font, textEditor.getCursorPos());
+
+		glm::vec2 screenBounds = glm::vec2(pushConstants.viewportSize) / pushConstants.textSize;
+		 // clamp translation to prevent moving text out of screen
+		pushConstants.translation.x = std::clamp<float>(pushConstants.translation.x, -cursorRealPos.x + 1, screenBounds.x - cursorRealPos.x - 1);
+		pushConstants.translation.y = std::clamp<float>(pushConstants.translation.y, -cursorRealPos.y + 1, screenBounds.y - cursorRealPos.y - 1);
+
+		textMesh.bind(cmdBuf);
+		textMesh.draw(cmdBuf, *shader);
+
+		PushConstantsCursor cursorPushConstants{
+			.viewportSize = {window.getWidth(), window.getHeight()},
+			.translation  = pushConstants.translation,
+			.cursorPos	   = cursorRealPos,
+			.textSize	   = pushConstants.textSize,
+			.time		   = (textEditorController.milisecondsSinceLastMove() < 200) ? 0 : (float)glfwGetTime()
+		};
+		cursorShader->bind(cmdBuf);
+		cursorShader->setPushConstants(cmdBuf, &cursorPushConstants, sizeof(cursorPushConstants), 0);
+		cursorMesh->bind(cmdBuf);
+		cursorMesh->draw(cmdBuf, *cursorShader);
 
 		win->endRendering(cmdBuf);
+		win->endFrame();
 
 		window.swapBuffers();
 	}

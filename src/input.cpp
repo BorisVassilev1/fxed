@@ -1,3 +1,4 @@
+#include "GLFW/glfw3.h"
 #define _USE_MATH_DEFINES
 
 #include "input.hpp"
@@ -9,10 +10,28 @@ Mouse::Mouse(Window &window, bool lock) : delta(0), window(window), lock(lock) {
 	position.x = window.getWidth() / 2.;
 	position.y = window.getHeight() / 2.;
 	glfwSetCursorPos(window.getHandle(), position.x, position.y);
+	glfwSetScrollCallback(window.getHandle(), handleScroll);
+	glfwSetMouseButtonCallback(window.getHandle(), handleMouseButton);
+
 	update();
 }
 
 Mouse::Mouse(Window &window) : Mouse(window, false) {}
+
+std::vector<std::function<void(GLFWwindow *, double, double)>> Mouse::scrollCallbacks;
+std::vector<std::function<void(GLFWwindow *, int, int, int)>>  Mouse::mouseButtonCallbacks;
+
+void Mouse::handleScroll(GLFWwindow *window, double xoffset, double yoffset) {
+	for (auto fun : scrollCallbacks) {
+		fun(window, xoffset, yoffset);
+	}
+}
+
+void Mouse::handleMouseButton(GLFWwindow *window, int button, int action, int mods) {
+	for (auto fun : mouseButtonCallbacks) {
+		fun(window, button, action, mods);
+	}
+}
 
 void Mouse::update() {
 	glm::dvec2 newPos;
@@ -48,14 +67,27 @@ void Mouse::show() {
 	visible = true;
 }
 
+void Mouse::addScrollCallback(const std::function<void(GLFWwindow *, double, double)> &callback) {
+	scrollCallbacks.push_back(callback);
+}
+void Mouse::addMouseButtonCallback(const std::function<void(GLFWwindow *, int, int, int)> &callback) {
+	mouseButtonCallbacks.push_back(callback);
+}
+
 void Keyboard::init(Window *window) {
 	Keyboard::window = window;
 	glfwSetKeyCallback(window->getHandle(), handleInput);
+	glfwSetCharCallback(window->getHandle(), handleCharInput);
 }
 
 void Keyboard::handleInput(GLFWwindow *window, int key, int scancode, int action, int mods) {
 	for (auto fun : callbacks) {
 		fun(window, key, scancode, action, mods);
+	}
+}
+void Keyboard::handleCharInput(GLFWwindow *window, unsigned int codepoint) {
+	for (auto fun : charCallbacks) {
+		fun(window, codepoint);
 	}
 }
 
@@ -68,3 +100,6 @@ void Keyboard::addKeyCallback(
 	callbacks.push_back(callback);
 }
 
+void Keyboard::addCharCallback(const std::function<void(GLFWwindow *window, int codepoint)> &callback) {
+	charCallbacks.push_back(callback);
+}

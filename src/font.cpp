@@ -3,10 +3,12 @@
 
 #include <msdf-atlas-gen/msdf-atlas-gen.h>
 
+#include "msdf-atlas-gen/GlyphBox.h"
 #include "nri.hpp"
 #include "utils.hpp"
 
 using namespace msdf_atlas;
+using namespace fxed;
 
 static nri::NRI *g_nri = nullptr;
 
@@ -92,7 +94,11 @@ Font::Font(nri::NRI &nri, nri::CommandQueue &q, const char *fontfilename, uint32
 			// The second argument can be ignored unless you mix different font sizes in one atlas.
 			// In the last argument, you can specify a charset other than ASCII.
 			// To load specific glyph indices, use loadGlyphs instead.
-			data->fontGeometry.loadCharset(font, 1.0, Charset::ASCII);
+
+			Charset charset = Charset::ASCII;
+			charset.add(U'�');
+
+			data->fontGeometry.loadCharset(font, 1.0, charset);
 			const double maxCornerAngle = 3.0;
 			for (GlyphGeometry &glyph : data->glyphs)
 				glyph.edgeColoring(&msdfgen::edgeColoringInkTrap, maxCornerAngle, 0);
@@ -158,14 +164,28 @@ Font::Font(nri::NRI &nri, nri::CommandQueue &q, const char *fontfilename, uint32
 }
 Font::~Font() { delete data; }
 
-Font::GlyphBox Font::getGlyphBox(char c) {
-	auto bp = data->fontGeometry.getGlyph(c);
+static const int tabSize = 4;
+
+Font::GlyphBox Font::getGlyphBox(uint32_t c) const {
+	bool isTab = (c == '\t');
+	if (isTab) c = ' ';	
+	const msdf_atlas::GlyphGeometry *bp = nullptr;
+	bp									= data->fontGeometry.getGlyph(c);
+	if (bp == nullptr) {
+		dbLog(dbg::LOG_WARNING, std::format("Glyph '{}' not found in font, using replacement character", c));
+		c  = U'�';	   // Fallback to replacement character
+		bp = data->fontGeometry.getGlyph(c);
+	}
 	if (bp == nullptr) { THROW_RUNTIME_ERR(std::format("Glyph '{}' not found in font!", c)); }
 	msdf_atlas::GlyphBox gb = *bp;
 	GlyphBox			 box{.index	  = gb.index,
 							 .advance = gb.advance,
 							 .bounds  = {gb.bounds.l, gb.bounds.b, gb.bounds.r, gb.bounds.t},
 							 .rect	  = {gb.rect.x, gb.rect.y, gb.rect.w, gb.rect.h}};
+	if (isTab) {
+		box.advance *= tabSize;
+		box.bounds.r *= tabSize;
+	}
 	return box;
 }
 
@@ -199,7 +219,7 @@ std::string getLinuxDefaultFont() {
 	std::string fontPath;
 
 	FcConfig  *config  = FcInitLoadConfigAndFonts();
-	FcPattern *pattern = FcNameParse((const FcChar8 *)"sans-serif");
+	FcPattern *pattern = FcNameParse((const FcChar8 *)"DejaVu Sans Mono:style=Regular");
 
 	FcConfigSubstitute(config, pattern, FcMatchPattern);
 	FcDefaultSubstitute(pattern);

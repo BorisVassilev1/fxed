@@ -16,6 +16,12 @@ class Mouse {
 
 	Mouse();
 
+	static std::vector<std::function<void(GLFWwindow *, double, double)>> scrollCallbacks;
+	static std::vector<std::function<void(GLFWwindow *, int, int, int)>> mouseButtonCallbacks;
+
+	static void handleScroll(GLFWwindow *, double, double);
+	static void handleMouseButton(GLFWwindow *, int, int, int);
+
    public:
 	bool visible						 = false;	  ///< is mouse visible
 	bool lock							 = false;	  ///< is mouse locked
@@ -49,6 +55,9 @@ class Mouse {
 
 	inline glm::dvec2 getPosition() { return position; }
 	inline glm::dvec2 getDelta() { return delta; }
+
+	static void addScrollCallback(const std::function<void(GLFWwindow *, double, double)> &callback);
+	static void addMouseButtonCallback(const std::function<void(GLFWwindow *, int, int, int)> &callback);
 };
 
 // keyboard will always have the same behaviour with all windows
@@ -60,8 +69,10 @@ class Keyboard {
 	inline static Window *window = nullptr;
 
 	inline static std::vector<std::function<void(GLFWwindow *, int, int, int, int)>> callbacks;
+	inline static std::vector<std::function<void(GLFWwindow *, int)>> charCallbacks;
 
 	static void handleInput(GLFWwindow *, int, int, int, int);
+	static void handleCharInput(GLFWwindow *, unsigned int);
 	Keyboard();
 
    public:
@@ -93,6 +104,12 @@ class Keyboard {
 	 * @param callback - callback that will be called on every change of key state on every window.
 	 */
 	static void addKeyCallback(const std::function<void(GLFWwindow *, int, int, int, int)> &callback);
+	/**
+	 * @brief Adds a callback to be called on character input.
+	 *
+	 * @param callback - callback that will be called on every character input on every window.
+	 */
+	static void addCharCallback(const std::function<void(GLFWwindow *, int)> &callback);
 };
 
 }	  // namespace fxed

@@ -15,9 +15,11 @@ struct VSOutput
 
 struct PushConstants
 {
-	float4 translate_scale; // xy = translate, zw = scale
+	int2 viewportSize;
+	int2 translation;
 	TextureHandle texture;
 	float textSize;
+	float time;
 };
 
 VK_PUSH_CONST_ATTR
@@ -26,11 +28,12 @@ PushConstants pushConstants : register(b0);
 [shader("vertex")]
 VSOutput VSMain(VSInput input)
 {
-	float2 translate = pushConstants.translate_scale.xy;
-	float2 scale = pushConstants.translate_scale.zw;
-
+	float2 scale = 2.f * pushConstants.textSize / float2(pushConstants.viewportSize);
     VSOutput output;
-	output.position = float4(scale * input.position + translate, 0.0, 1.0);
+	output.position = float4(-1.f + scale * (input.position + pushConstants.translation), 1.0, 1.0);
+	// snap to pixel grid
+	//output.position.xy = round(output.position.xy * pushConstants.viewportSize / 2.f) / (pushConstants.viewportSize / 2.f);
+
 	output.texCoord = input.texCoord;
     return output;
 }
@@ -61,15 +64,17 @@ float4 PSMain(PSInput input) : SV_TARGET
 	float largeness = (pushConstants.textSize - 12.f) / 48.0f; // Assuming textSize ranges from 12 to 60
 	largeness = clamp(largeness, 0.0f, 1.0f);
 
-	float Smoothing = lerp(0.25f, 1.0f, largeness);
+	float Smoothing = lerp(1.0f, 0.5f, largeness);
 
 	float d = median(texColor.rgb) - 0.5f;
 
 	float pxr = d/fwidth(d) ;
 	float w = smoothstep(-Smoothing,Smoothing, pxr);
 
-	float4 insideColor = float4(243/255.f, 139/255.f, 168/255.f, 1.0);
-	float4 outsideColor = float4(30/255.f, 30/255.f, 46/255.f, 1.0);
+	//float4 insideColor = float4(243/255.f, 139/255.f, 168/255.f, 1.0);
+	float4 insideColor = float4(1.0, 1.0, 1.0, 1.0);
+	float4 outsideColor = float4(30/255.f, 30/255.f, 46/255.f, 0.0);
+	//float4 outsideColor = float4(0,0,0, 1.0);
 	float4 color = lerp(outsideColor, insideColor, w);
 
 	// Calculate screen-space derivatives for proper antialiasing

@@ -82,6 +82,9 @@ class VulkanAllocation : public Allocation {
 	vk::DeviceMemory getMemory() { return memory; }
 	vk::Device		 getDevice() { return device; }
 	std::size_t		 getSize() const override { return size; }
+
+	void *map() override;
+	void  unmap() override;
 };
 
 class VulkanBuffer : public Buffer {
@@ -312,29 +315,6 @@ class VulkanComputeProgram : public VulkanProgram, public ComputeProgram {
 				  uint32_t groupCountZ) override;
 };
 
-class VulkanRayTracingProgram : public VulkanProgram, public RayTracingProgram {
-   public:
-	VulkanBuffer	 sbtBuffer;
-	VulkanAllocation sbtMemory;
-
-	VulkanBuffer	 uploadBuffer;
-	VulkanAllocation uploadMemory;
-
-	vk::StridedDeviceAddressRegionKHR sbtRayGenRegion;	   // TODO: this should be private
-	vk::StridedDeviceAddressRegionKHR sbtMissRegion;
-	vk::StridedDeviceAddressRegionKHR sbtHitRegion;
-	VulkanRayTracingProgram(VulkanNRI &nri, vk::raii::Pipeline &&ppln, vk::raii::PipelineLayout &&layout,
-							VulkanBuffer &&sbtBuf, VulkanAllocation &&sbtMem, VulkanBuffer &&uploadBuf,
-							VulkanAllocation &&uploadMem)
-		: VulkanProgram(nri, std::move(ppln), std::move(layout), vk::PipelineBindPoint::eRayTracingKHR),
-		  sbtBuffer(std::move(sbtBuf)),
-		  sbtMemory(std::move(sbtMem)),
-		  uploadBuffer(std::move(uploadBuf)),
-		  uploadMemory(std::move(uploadMem)) {}
-
-	void traceRays(CommandBuffer &commandBuffer, uint32_t width, uint32_t height, uint32_t depth) override;
-};
-
 class VulkanMemoryCache {
 	VulkanBuffer	 buffer;
 	VulkanAllocation allocation;
@@ -428,9 +408,6 @@ class VulkanWindow : public Window {
 	vk::raii::Fence		inFlightFence;
 
 	std::vector<ImageAndView<VulkanImage2D, VulkanRenderTarget>> swapChainImages;
-	std::optional<VulkanRenderTarget>							 depthImageView;
-	std::optional<VulkanImage2D>								 depthImage;
-	std::optional<VulkanAllocation>								 depthImageAllocation;
 
 	std::unique_ptr<VulkanCommandBuffer> commandBuffer;
 

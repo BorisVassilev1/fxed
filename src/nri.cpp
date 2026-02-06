@@ -7,6 +7,8 @@ ResourceHandle::ResourceHandle(ResourceType type, bool writable, uint32_t index)
 
 ResourceHandle ResourceHandle::INVALID_HANDLE = ResourceHandle(0xFFFFFFFF);
 
+void ProgramBuilder::clearShaderModules() { shaderStagesInfo.clear(); }
+
 ProgramBuilder &ProgramBuilder::addShaderModule(const ShaderCreateInfo &shaderInfo) {
 	shaderStagesInfo.push_back(shaderInfo);
 	return *this;

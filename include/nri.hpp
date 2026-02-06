@@ -351,6 +351,9 @@ class Allocation {
    public:
 	virtual ~Allocation() {}
 	virtual std::size_t getSize() const = 0;
+
+	virtual void *map()	  = 0;
+	virtual void  unmap() = 0;
 };
 
 class Buffer {
@@ -446,6 +449,7 @@ class ProgramBuilder {
    public:
 	virtual ~ProgramBuilder() {}
 
+	void									   clearShaderModules();
 	ProgramBuilder							  &addShaderModule(const ShaderCreateInfo &shaderInfo);
 	ProgramBuilder							  &setVertexBindings(const std::vector<VertexBinding> &bindings);
 	ProgramBuilder							  &setPrimitiveType(PrimitiveType primitiveType);
@@ -560,7 +564,7 @@ class Window {
 	virtual void endRendering(CommandBuffer &cmdBuf)										= 0;
 
 	virtual CommandQueue &getMainQueue() = 0;
-	glm::vec4 clearColor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+	glm::vec4			  clearColor	 = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
 };
 
 }	  // namespace nri

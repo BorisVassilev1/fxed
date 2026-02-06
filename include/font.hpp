@@ -5,6 +5,7 @@
 #include "nri.hpp"
 #include "utils.hpp"
 
+namespace fxed {
 class Font {
 	struct FontData;
 
@@ -35,8 +36,9 @@ class Font {
 
 	auto getHandle() { return imageView->getHandle(); }
 
-	GlyphBox getGlyphBox(char c);
-
+	GlyphBox getGlyphBox(uint32_t c) const;
+	int getAtlasSize() const { return image->getWidth(); }
 
 	static std::string getDefaultSystemFontPath();
 };
+}	  // namespace fxed

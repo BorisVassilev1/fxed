@@ -562,6 +562,22 @@ VulkanAllocation::VulkanAllocation(VulkanNRI &nri, MemoryRequirements memoryRequ
 	memory = vk::raii::DeviceMemory(nri.getDevice(), allocInfo);
 }
 
+void *VulkanAllocation::map() {
+	assert(memory != nullptr);
+	void *data = nullptr;
+	data	   = memory.mapMemory(0, size);
+	if (data == nullptr) {
+		dbLog(dbg::LOG_ERROR, "Failed to map memory!");
+		throw std::runtime_error("Failed to map memory!");
+	}
+	return data;
+}
+
+void VulkanAllocation::unmap() {
+	assert(memory != nullptr);
+	memory.unmapMemory();
+}
+
 ResourceHandle VulkanBuffer::createHandle() const {
 	return nri->getDescriptorAllocator().addStorageBufferDescriptor(*this);
 }
@@ -905,8 +921,7 @@ VulkanWindow::VulkanWindow(VulkanNRI &nri)
 	  presentQueue(nullptr),
 	  imageAvailableSemaphore(nri.getDevice(), vk::SemaphoreCreateInfo()),
 	  renderFinishedSemaphore(nri.getDevice(), vk::SemaphoreCreateInfo()),
-	  inFlightFence(nri.getDevice(), vk::FenceCreateInfo(vk::FenceCreateFlagBits::eSignaled)),
-	  depthImage(std::nullopt) {
+	  inFlightFence(nri.getDevice(), vk::FenceCreateInfo(vk::FenceCreateFlagBits::eSignaled)) {
 	if (imageAvailableSemaphore == nullptr || renderFinishedSemaphore == nullptr || inFlightFence == nullptr) {
 		throw std::runtime_error("Failed to create synchronization objects for a frame!");
 	}
@@ -992,19 +1007,6 @@ void VulkanWindow::createSwapChain(uint32_t &width, uint32_t &height) {
 			*commandBuffer, vk::ImageLayout::ePresentSrcKHR, vk::AccessFlagBits::eNone, vk::AccessFlagBits::eMemoryRead,
 			vk::PipelineStageFlagBits::eTopOfPipe, vk::PipelineStageFlagBits::eBottomOfPipe);
 	}
-
-	depthImage =
-		VulkanImage2D(nri, width, height, Format::FORMAT_D32_SFLOAT, ImageUsage::IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT);
-	depthImageAllocation = VulkanAllocation(
-		nri, depthImage->getMemoryRequirements().setTypeRequest(MemoryTypeRequest::MEMORY_TYPE_DEVICE));
-	depthImage->bindMemory(*depthImageAllocation, 0);
-
-	depthImage->transitionLayout(
-		*commandBuffer, vk::ImageLayout::eDepthStencilAttachmentOptimal, vk::AccessFlagBits::eNone,
-		vk::AccessFlagBits::eDepthStencilAttachmentRead | vk::AccessFlagBits::eDepthStencilAttachmentWrite,
-		vk::PipelineStageFlagBits::eTopOfPipe,
-		vk::PipelineStageFlagBits::eEarlyFragmentTests | vk::PipelineStageFlagBits::eLateFragmentTests);
-	depthImageView = VulkanRenderTarget(nri, *depthImage);
 }
 
 void VulkanWindow::beginFrame() {
@@ -1082,18 +1084,6 @@ void VulkanWindow::beginRendering(CommandBuffer &cmdBuf, const ImageAndViewRef &
 	renderingInfo.pColorAttachments	   = &colorAttachment;
 	renderingInfo.layerCount		   = 1;
 
-	vk::RenderingAttachmentInfo depthAttachment{};
-	depthAttachment.sType		= vk::StructureType::eRenderingAttachmentInfo;
-	depthAttachment.imageView	= depthImageView->get();
-	depthAttachment.imageLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-	depthAttachment.loadOp		= vk::AttachmentLoadOp::eClear;
-	depthAttachment.storeOp		= vk::AttachmentStoreOp::eDontCare;
-	vk::ClearValue depthClearValue;
-	depthClearValue.depthStencil = vk::ClearDepthStencilValue(1.0f, 0);
-	depthAttachment.clearValue	 = depthClearValue;
-
-	renderingInfo.pDepthAttachment = &depthAttachment;
-
 	vkCmdBuf.commandBuffer.beginRendering(renderingInfo);
 
 	vkCmdBuf.commandBuffer.setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(img.getWidth()),
@@ -1118,7 +1108,7 @@ std::pair<std::vector<vk::raii::ShaderModule>, std::vector<vk::PipelineShaderSta
 
 	CComPtr<IDxcCompiler3> compiler;
 #ifndef NDEBUG
-	HRESULT				   hr = DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&compiler));
+	HRESULT hr = DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&compiler));
 #endif
 	assert(SUCCEEDED(hr) && "Failed to create DX Compiler.");
 
@@ -1313,7 +1303,7 @@ std::unique_ptr<GraphicsProgram> VulkanProgramBuilder::buildGraphicsProgram() {
 														vk::DynamicState::eBlendConstants};
 	vk::PipelineDynamicStateCreateInfo dynamicStateInfo({}, dynamicStates.size(), dynamicStates.data());
 
-	vk::PipelineDepthStencilStateCreateInfo depthStencilInfo({}, VK_FALSE, VK_TRUE, vk::CompareOp::eLess, VK_FALSE,
+	vk::PipelineDepthStencilStateCreateInfo depthStencilInfo({}, VK_FALSE, VK_FALSE, vk::CompareOp::eLess, VK_FALSE,
 															 VK_FALSE, vk::StencilOpState(), vk::StencilOpState(), 0.0f,
 															 1.0f);
 
@@ -1343,147 +1333,12 @@ std::unique_ptr<ComputeProgram> VulkanProgramBuilder::buildComputeProgram() {
 	return std::make_unique<VulkanComputeProgram>(nri, std::move(pipelines[0]), std::move(pipelineLayout));
 }
 
-static auto findShaderStage(const std::vector<vk::PipelineShaderStageCreateInfo> &shaderStages,
-							vk::ShaderStageFlagBits								  stage) {
-	return std::find_if(shaderStages.begin(), shaderStages.end(),
-						[stage](const vk::PipelineShaderStageCreateInfo &s) { return s.stage == stage; });
-}
-
 std::unique_ptr<RayTracingProgram> VulkanProgramBuilder::buildRayTracingProgram(nri::CommandBuffer &commandBuffer) {
-	auto [shaderModules, shaderStages] = createShaderModules(std::move(shaderStagesInfo), nri.getDevice());
-
-	vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};
-	auto						 pushConstantRanges = createPushConstantRanges(this->pushConstantRanges);
-	pipelineLayoutInfo.setPushConstantRangeCount(pushConstantRanges.size());
-	pipelineLayoutInfo.setPPushConstantRanges(pushConstantRanges.data());
-	pipelineLayoutInfo.setSetLayoutCount(1);
-	pipelineLayoutInfo.setPSetLayouts(&*nri.getDescriptorAllocator().getDescriptorSetLayout());
-	auto pipelineLayout = vk::raii::PipelineLayout(nri.getDevice(), pipelineLayoutInfo);
-
-	// find ray generation shader stage
-	auto raygenit	  = findShaderStage(shaderStages, vk::ShaderStageFlagBits::eRaygenKHR);
-	auto closesthitit = findShaderStage(shaderStages, vk::ShaderStageFlagBits::eClosestHitKHR);
-	auto anyhitit	  = findShaderStage(shaderStages, vk::ShaderStageFlagBits::eAnyHitKHR);
-	auto missit		  = findShaderStage(shaderStages, vk::ShaderStageFlagBits::eMissKHR);
-
-	auto raygen		= raygenit != shaderStages.end() ? raygenit - shaderStages.begin() : VK_SHADER_UNUSED_KHR;
-	auto closesthit = closesthitit != shaderStages.end() ? closesthitit - shaderStages.begin() : VK_SHADER_UNUSED_KHR;
-	auto anyhit		= anyhitit != shaderStages.end() ? anyhitit - shaderStages.begin() : VK_SHADER_UNUSED_KHR;
-	auto miss		= missit != shaderStages.end() ? missit - shaderStages.begin() : VK_SHADER_UNUSED_KHR;
-
-	if (raygen == VK_SHADER_UNUSED_KHR) dbLog(dbg::LOG_ERROR, "No ray generation shader found in ray tracing program!");
-	// if (miss != VK_SHADER_UNUSED_KHR) dbLog(dbg::LOG_ERROR, "Miss shaders not currently supported in VulkanNRI");
-
-	std::vector<vk::RayTracingShaderGroupCreateInfoKHR> shaderGroups;
-	if (raygen != VK_SHADER_UNUSED_KHR)
-		shaderGroups.push_back(vk::RayTracingShaderGroupCreateInfoKHR(vk::RayTracingShaderGroupTypeKHR::eGeneral,
-																	  raygen, VK_SHADER_UNUSED_KHR,
-																	  VK_SHADER_UNUSED_KHR, VK_SHADER_UNUSED_KHR));
-	if (miss != VK_SHADER_UNUSED_KHR)
-		shaderGroups.push_back(vk::RayTracingShaderGroupCreateInfoKHR(vk::RayTracingShaderGroupTypeKHR::eGeneral, miss,
-																	  VK_SHADER_UNUSED_KHR, VK_SHADER_UNUSED_KHR,
-																	  VK_SHADER_UNUSED_KHR));
-	if (closesthit != VK_SHADER_UNUSED_KHR)
-		shaderGroups.push_back(
-			vk::RayTracingShaderGroupCreateInfoKHR(vk::RayTracingShaderGroupTypeKHR::eTrianglesHitGroup,
-												   VK_SHADER_UNUSED_KHR, closesthit, anyhit, VK_SHADER_UNUSED_KHR));
-
-	vk::RayTracingPipelineCreateInfoKHR pipelineInfo({}, static_cast<uint32_t>(shaderStages.size()),
-													 shaderStages.data(), shaderGroups.size(), shaderGroups.data(),
-													 1,		// no recursion for now
-													 {}, {}, {}, *pipelineLayout, {}, {});
-
-	static PFN_vkCreateRayTracingPipelinesKHR vkCreateRayTracingPipelinesKHR =
-		reinterpret_cast<PFN_vkCreateRayTracingPipelinesKHR>(
-			nri.getInstance().getProcAddr("vkCreateRayTracingPipelinesKHR"));
-	assert(vkCreateRayTracingPipelinesKHR != nullptr);
-
-	auto pipelines = nri.getDevice().createRayTracingPipelinesKHR(nullptr, nullptr, pipelineInfo, nullptr);
-	if (!pipelines.size()) dbLog(dbg::LOG_ERROR, "Failed to create ray tracing pipeline!");
-
-	VkPhysicalDeviceRayTracingPipelinePropertiesKHR rtProps{};
-	rtProps.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
-	VkPhysicalDeviceProperties2 properties2{};
-	properties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
-	properties2.pNext = &rtProps;
-	vkGetPhysicalDeviceProperties2(*nri.getPhysicalDevice(), &properties2);
-
-	// Calculate aligned sizes
-	uint32_t handleSize		   = rtProps.shaderGroupHandleSize;
-	uint32_t handleAlignment   = rtProps.shaderGroupHandleAlignment;
-	uint32_t baseAlignment	   = rtProps.shaderGroupBaseAlignment;
-	uint32_t alignedHandleSize = (handleSize + handleAlignment - 1) & ~(handleAlignment - 1);
-	alignedHandleSize		   = (alignedHandleSize + baseAlignment - 1) & ~(baseAlignment - 1);
-
-	uint32_t numGroups = static_cast<uint32_t>(shaderGroups.size());
-	uint32_t sbtSize   = numGroups * alignedHandleSize;
-	dbLog(dbg::LOG_DEBUG, "SBT size: ", sbtSize, " bytes (", numGroups, " groups of ", alignedHandleSize,
-		  " bytes each).");
-
-	std::vector<uint8_t>							handleData(numGroups * handleSize);
-	static PFN_vkGetRayTracingShaderGroupHandlesKHR vkGetRayTracingShaderGroupHandlesKHR =
-		reinterpret_cast<PFN_vkGetRayTracingShaderGroupHandlesKHR>(
-			nri.getInstance().getProcAddr("vkGetRayTracingShaderGroupHandlesKHR"));
-
-	vkGetRayTracingShaderGroupHandlesKHR(*nri.getDevice(), *pipelines[0], 0, numGroups, handleData.size(),
-										 handleData.data());
-
-	VulkanBuffer sbtBuffer =
-		VulkanBuffer(nri, sbtSize,
-					 BufferUsage::BUFFER_USAGE_SHADER_BINDING_TABLE | BufferUsage::BUFFER_USAGE_TRANSFER_SRC |
-						 BufferUsage::BUFFER_USAGE_TRANSFER_DST);
-	VulkanAllocation sbtAllocation = VulkanAllocation(nri, sbtBuffer.getMemoryRequirements()
-															   .setAlignment(baseAlignment)
-															   .setTypeRequest(MemoryTypeRequest::MEMORY_TYPE_DEVICE));
-	sbtBuffer.bindMemory(sbtAllocation, 0);
-
-	VulkanBuffer	 uploadBuffer	  = VulkanBuffer(nri, sbtSize, BufferUsage::BUFFER_USAGE_TRANSFER_SRC);
-	VulkanAllocation uploadAllocation = VulkanAllocation(
-		nri, uploadBuffer.getMemoryRequirements().setTypeRequest(MemoryTypeRequest::MEMORY_TYPE_UPLOAD));
-	uploadBuffer.bindMemory(uploadAllocation, 0);
-
-	{
-		void		  *mappedData = uploadBuffer.map(0, sbtSize);
-		uint8_t		  *dst		  = reinterpret_cast<uint8_t *>(mappedData);
-		const uint8_t *src		  = handleData.data();
-		for (uint32_t i = 0; i < numGroups; i++) {
-			std::memcpy(dst, src, handleSize);
-			dst += alignedHandleSize;
-			src += handleSize;
-		}
-		uploadBuffer.unmap();
-	}
-	sbtBuffer.copyFrom(commandBuffer, uploadBuffer, 0, 0, sbtSize);
-
-	auto result = std::make_unique<VulkanRayTracingProgram>(nri, std::move(pipelines[0]), std::move(pipelineLayout),
-															std::move(sbtBuffer), std::move(sbtAllocation),
-															std::move(uploadBuffer), std::move(uploadAllocation));
-
-	dbLog(dbg::LOG_DEBUG, "sbtBuffer: ", *result->sbtBuffer.getBuffer());
-	dbLog(dbg::LOG_DEBUG, "sbtBuffer: address = ", std::hex, result->sbtBuffer.getAddress(), std::dec);
-
-	result->sbtRayGenRegion.deviceAddress = result->sbtBuffer.getAddress();
-	result->sbtRayGenRegion.stride		  = alignedHandleSize;
-	result->sbtRayGenRegion.size		  = alignedHandleSize;
-	result->sbtMissRegion.deviceAddress =
-		result->sbtBuffer.getAddress() + (raygen != VK_SHADER_UNUSED_KHR ? alignedHandleSize : 0);
-	result->sbtMissRegion.stride	   = alignedHandleSize;
-	result->sbtMissRegion.size		   = (miss != VK_SHADER_UNUSED_KHR ? alignedHandleSize : 0);
-	result->sbtHitRegion.deviceAddress = result->sbtBuffer.getAddress() +
-										 (raygen != VK_SHADER_UNUSED_KHR ? alignedHandleSize : 0) +
-										 (miss != VK_SHADER_UNUSED_KHR ? alignedHandleSize : 0);
-	result->sbtHitRegion.stride = alignedHandleSize;
-	result->sbtHitRegion.size	= (closesthit != VK_SHADER_UNUSED_KHR ? alignedHandleSize : 0);
-	return result;
+	static_cast<void>(commandBuffer);
+	dbLog(dbg::LOG_ERROR, "Ray tracing pipeline creation is not implemented yet!");
+	THROW_RUNTIME_ERR("Ray tracing pipeline creation is not implemented yet!");
+	return nullptr;
 }
-
-void VulkanRayTracingProgram::traceRays(CommandBuffer &commandBuffer, uint32_t width, uint32_t height, uint32_t depth) {
-	auto &vkCmdBuf = static_cast<VulkanCommandBuffer &>(commandBuffer);
-
-	vkCmdBuf.begin();
-	vkCmdBuf.commandBuffer.traceRaysKHR(this->sbtRayGenRegion, this->sbtMissRegion, this->sbtHitRegion, {}, width,
-										height, depth);
-};
 
 void VulkanProgram::bind(CommandBuffer &commandBuffer) {
 	auto &vkCmdBuf = static_cast<VulkanCommandBuffer &>(commandBuffer);
