@@ -1117,11 +1117,15 @@ std::pair<std::vector<vk::raii::ShaderModule>, std::vector<vk::PipelineShaderSta
 	std::vector<vk::raii::ShaderModule>			   shaderModules;
 
 	CComPtr<IDxcCompiler3> compiler;
+#ifndef NDEBUG
 	HRESULT				   hr = DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&compiler));
+#endif
 	assert(SUCCEEDED(hr) && "Failed to create DX Compiler.");
 
 	CComPtr<IDxcUtils> utils;
+#ifndef NDEBUG
 	hr = DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&utils));
+#endif
 	assert(SUCCEEDED(hr) && "Failed to create DX Utils.");
 
 	auto includeHandler = std::make_unique<CustomIncludeHandler>(utils);
