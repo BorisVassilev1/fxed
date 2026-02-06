@@ -1,9 +1,7 @@
-#include <GLFW/glfw3.h>
 #include <iostream>
 
 #include <fstream>
 
-#include "GLFW/glfw3.h"
 #include "font.hpp"
 #include "input.hpp"
 #include "mesh.hpp"
