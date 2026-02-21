@@ -57,6 +57,32 @@ class ImageAtlasStorage {
 			}
 		}
 	}
+
+	void put(int x, int y, const msdfgen::BitmapConstRef<float, 1> &subBitmap) {
+		assert(data != nullptr);
+		assert(x + subBitmap.width <= width && y + subBitmap.height <= height);		// FIX BOUNDS CHECK
+		for (int j = 0; j < subBitmap.height; ++j) {
+			for (int i = 0; i < subBitmap.width; ++i) {
+				((T *)data)[(y + j) * width * N + (x * N) + i * N + 3] = subBitmap.pixels[j * subBitmap.width + i];
+			}
+		}
+	}
+
+	void put(int x, int y, const msdfgen::BitmapConstRef<float, 3> &subBitmap) {
+		assert(data != nullptr);
+		assert(x + subBitmap.width <= width && y + subBitmap.height <= height);		// FIX BOUNDS CHECK
+		for (int j = 0; j < subBitmap.height; ++j) {
+			for (int i = 0; i < subBitmap.width; ++i) {
+				((T *)data)[(y + j) * width * N + (x * N) + i * N + 0] =
+					subBitmap.pixels[j * subBitmap.width * 3 + i * 3 + 0];
+				((T *)data)[(y + j) * width * N + (x * N) + i * N + 1] =
+					subBitmap.pixels[j * subBitmap.width * 3 + i * 3 + 1];
+				((T *)data)[(y + j) * width * N + (x * N) + i * N + 2] =
+					subBitmap.pixels[j * subBitmap.width * 3 + i * 3 + 2];
+			}
+		}
+	}
+
 	void get(int x, int y, const msdfgen::BitmapRef<float, 4> &subBitmap) const {
 		for (int j = 0; j < subBitmap.height; ++j) {
 			for (int i = 0; i < subBitmap.width; ++i) {
@@ -71,6 +97,28 @@ class ImageAtlasStorage {
 			}
 		}
 	}
+
+	void get(int x, int y, const msdfgen::BitmapRef<float, 3> &subBitmap) const {
+		for (int j = 0; j < subBitmap.height; ++j) {
+			for (int i = 0; i < subBitmap.width; ++i) {
+				subBitmap.pixels[j * subBitmap.width * 3 + i * 3 + 0] =
+					((T *)data)[(y + j) * width * N + (x * N) + i * N + 0];
+				subBitmap.pixels[j * subBitmap.width * 3 + i * 3 + 1] =
+					((T *)data)[(y + j) * width * N + (x * N) + i * N + 1];
+				subBitmap.pixels[j * subBitmap.width * 3 + i * 3 + 2] =
+					((T *)data)[(y + j) * width * N + (x * N) + i * N + 2];
+			}
+		}
+	}
+
+	void get(int x, int y, const msdfgen::BitmapRef<float, 1> &subBitmap) const {
+		for (int j = 0; j < subBitmap.height; ++j) {
+			for (int i = 0; i < subBitmap.width; ++i) {
+				subBitmap.pixels[j * subBitmap.width + i] = ((T *)data)[(y + j) * width * N + (x * N) + i * N + 3];
+			}
+		}
+	}
+
 	// this is hack
 	auto &getUploadBuffer() const { return uploadBuffer; }
 	auto &getUploadBufferAllocation() const { return uploadBufferAllocation; }
@@ -168,12 +216,15 @@ static const int tabSize = 4;
 
 Font::GlyphBox Font::getGlyphBox(uint32_t c) const {
 	bool isTab = (c == '\t');
-	if (isTab) c = ' ';	
+	if (isTab) c = ' ';
 	const msdf_atlas::GlyphGeometry *bp = nullptr;
 	bp									= data->fontGeometry.getGlyph(c);
 	if (bp == nullptr) {
-		dbLog(dbg::LOG_WARNING, std::format("Glyph '{}' not found in font, using replacement character", c));
 		c  = U'�';	   // Fallback to replacement character
+		bp = data->fontGeometry.getGlyph(c);
+	}
+	if (bp == nullptr) {
+		c  = U'?';	   // Fallback to question mark if replacement character is also missing
 		bp = data->fontGeometry.getGlyph(c);
 	}
 	if (bp == nullptr) { THROW_RUNTIME_ERR(std::format("Glyph '{}' not found in font!", c)); }
@@ -194,14 +245,14 @@ Font::GlyphBox Font::getGlyphBox(uint32_t c) const {
 	#include <shlobj.h>
 	#include <string>
 
-std::string getWindowsDefaultFont() {
+std::string findWindowsFontPath(const std::string_view &fontName) {
 	char fontsPath[MAX_PATH];
 
 	// Get Windows Fonts directory
 	if (SHGetFolderPathA(NULL, CSIDL_FONTS, NULL, 0, fontsPath) == S_OK) {
 		// Common default fonts in order of preference
-		std::string segoeui = std::string(fontsPath) + "\\segoeui.ttf";		// Windows 7+
-		std::string tahoma	= std::string(fontsPath) + "\\tahoma.ttf";		// Older fallback
+		std::string segoeui = std::string(fontsPath) + "\\" + std::string(fontName) + ".ttf";	  // Preferred font
+		std::string tahoma	= std::string(fontsPath) + "\\tahoma.ttf";							  // Older fallback
 
 		// Check which exists
 		if (GetFileAttributesA(segoeui.c_str()) != INVALID_FILE_ATTRIBUTES) { return segoeui; }
@@ -215,11 +266,11 @@ std::string getWindowsDefaultFont() {
 	#include <fontconfig/fontconfig.h>
 	#include <string>
 
-std::string getLinuxDefaultFont() {
+std::string findLinuxFontPath(const std::string_view &fontName) {
 	std::string fontPath;
 
 	FcConfig  *config  = FcInitLoadConfigAndFonts();
-	FcPattern *pattern = FcNameParse((const FcChar8 *)"DejaVu Sans Mono:style=Regular");
+	FcPattern *pattern = FcNameParse((const FcChar8 *)fontName.data());
 
 	FcConfigSubstitute(config, pattern, FcMatchPattern);
 	FcDefaultSubstitute(pattern);
@@ -240,11 +291,24 @@ std::string getLinuxDefaultFont() {
 }
 #endif
 
+std::string Font::findFontPath(std::string_view fontName) {
+	std::string result;
+#ifdef _WIN32
+	result = findWindowsFontPath(fontName);
+#elif __linux__
+	result = findLinuxFontPath(fontName);
+#else
+	result = "";	 // Unsupported platform
+#endif
+	if (result.empty()) { result = getDefaultSystemFontPath(); }
+	return result;
+}
+
 std::string Font::getDefaultSystemFontPath() {
 #ifdef _WIN32
-	return getWindowsDefaultFont();
+	return findWindowsFontPath("segoeui");
 #elif __linux__
-	return getLinuxDefaultFont();
+	return findLinuxFontPath("DejaVu Sans Mono:style=Regular");
 #else
 	return "";	   // Unsupported platform
 #endif

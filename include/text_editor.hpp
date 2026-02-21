@@ -1,46 +1,48 @@
 #pragma once
 
+#include <string_view>
 #include "font.hpp"
 #include "input.hpp"
 
 class TextEditorBase {
-public:
-	virtual void insertChar(char c) = 0;
-	virtual void deleteChar()			 = 0;
-	virtual void moveCursor(int dx, int dy) = 0;
-	virtual std::string getText() const	 = 0;
+   public:
+	virtual void		   insertChar(char32_t c)	  = 0;
+	virtual void		   deleteChar()				  = 0;
+	virtual void		   moveCursor(int dx, int dy) = 0;
+	virtual std::u32string getText() const			  = 0;
 };
 
 class TextEditorController {
-	TextEditorBase &editor;
+	TextEditorBase								  &editor;
 	std::chrono::high_resolution_clock::time_point lastMoveTime = std::chrono::high_resolution_clock::now();
 
-public:
+   public:
 	TextEditorController(TextEditorBase &editor) : editor(editor) {
 		fxed::Keyboard::addCharCallback([this, &editor](GLFWwindow *window, unsigned int codepoint) {
-			editor.insertChar((char)codepoint);
+			editor.insertChar((char32_t)codepoint);
 			lastMoveTime = std::chrono::high_resolution_clock::now();
 		});
-		fxed::Keyboard::addKeyCallback([this, &editor](GLFWwindow *window, int key, int scancode, int action, int mods) {
-			if (action == GLFW_PRESS || action == GLFW_REPEAT) {
-				if (key == GLFW_KEY_BACKSPACE) {
-					editor.deleteChar();
-				} else if (key == GLFW_KEY_ENTER) {
-					editor.insertChar('\n');
-				} else if (key == GLFW_KEY_TAB) {
-					editor.insertChar('\t');
-				} else if (key == GLFW_KEY_LEFT) {
-					editor.moveCursor(-1, 0);
-				} else if (key == GLFW_KEY_RIGHT) {
-					editor.moveCursor(1, 0);
-				} else if (key == GLFW_KEY_UP) {
-					editor.moveCursor(0, -1);
-				} else if (key == GLFW_KEY_DOWN) {
-					editor.moveCursor(0, 1);
+		fxed::Keyboard::addKeyCallback(
+			[this, &editor](GLFWwindow *window, int key, int scancode, int action, int mods) {
+				if (action == GLFW_PRESS || action == GLFW_REPEAT) {
+					if (key == GLFW_KEY_BACKSPACE) {
+						editor.deleteChar();
+					} else if (key == GLFW_KEY_ENTER) {
+						editor.insertChar('\n');
+					} else if (key == GLFW_KEY_TAB) {
+						editor.insertChar('\t');
+					} else if (key == GLFW_KEY_LEFT) {
+						editor.moveCursor(-1, 0);
+					} else if (key == GLFW_KEY_RIGHT) {
+						editor.moveCursor(1, 0);
+					} else if (key == GLFW_KEY_UP) {
+						editor.moveCursor(0, -1);
+					} else if (key == GLFW_KEY_DOWN) {
+						editor.moveCursor(0, 1);
+					}
+					lastMoveTime = std::chrono::high_resolution_clock::now();
 				}
-				lastMoveTime = std::chrono::high_resolution_clock::now();
-			}
-		});
+			});
 	}
 
 	size_t milisecondsSinceLastMove() const {
@@ -50,13 +52,12 @@ public:
 };
 
 class TextEditor : public TextEditorBase {
-	glm::ivec2 cursorPos{0, 0};
-	std::vector<std::string> lines;
+	glm::ivec2					cursorPos{0, 0};
+	std::vector<std::u32string> lines;
 
    public:
-
 	TextEditor() { lines.emplace_back(); }
-	TextEditor(std::string_view text) {
+	TextEditor(std::u32string_view text) {
 		size_t pos = 0;
 		while (pos < text.size()) {
 			size_t nextPos = text.find('\n', pos);
@@ -68,14 +69,12 @@ class TextEditor : public TextEditorBase {
 				pos = nextPos + 1;
 			}
 		}
-		if(lines.empty()) {
-			lines.emplace_back();
-		}
+		if (lines.empty()) { lines.emplace_back(); }
 	}
 
-	void insertChar(char c) override {
+	void insertChar(char32_t c) override {
 		if (c == '\n') {
-			std::string newLine = lines[cursorPos.y].substr(cursorPos.x);
+			std::u32string newLine = lines[cursorPos.y].substr(cursorPos.x);
 			lines[cursorPos.y].resize(cursorPos.x);
 			lines.insert(lines.begin() + cursorPos.y + 1, std::move(newLine));
 			cursorPos.y++;
@@ -103,10 +102,10 @@ class TextEditor : public TextEditorBase {
 		cursorPos.x = std::clamp(cursorPos.x + dx, 0, (int32_t)lines[cursorPos.y].size());
 	}
 
-	std::string getText() const override {
-		std::string result;
+	std::u32string getText() const override {
+		std::u32string result;
 		for (const auto &line : lines) {
-			result += line + '\n';
+			result += line + U'\n';
 		}
 		return result;
 	}

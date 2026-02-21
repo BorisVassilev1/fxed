@@ -10,6 +10,7 @@
 #include "glfw_window.hpp"
 #include "text_editor.hpp"
 #include "text_rendering.hpp"
+#include "utf8_convert.hpp"
 
 struct PushConstants {
 	glm::ivec2			viewportSize;
@@ -21,12 +22,13 @@ struct PushConstants {
 struct PushConstantsCursor {
 	glm::ivec2 viewportSize;
 	glm::ivec2 translation = {0, 0};
-	glm::vec2 cursorPos;
+	glm::vec2  cursorPos;
 	float	   textSize;
-	float time;
+	float	   time;
 };
 
 int main(int argc, char *argv[]) {
+	// 🐊, 🚀
 	auto nri = nri::Factory::getInstance().createNRI("Vulkan", nri::CreateBits::GLFW);
 
 	fxed::Window window(*nri, 800, 600, "Vulkan NRI Window");
@@ -36,7 +38,8 @@ int main(int argc, char *argv[]) {
 	auto &win		= window.getNativeWindow();
 	win->clearColor = glm::vec4(30 / 255.f, 30 / 255.f, 46 / 255.f, 1.0f);
 
-	std::string fontPath = fxed::Font::getDefaultSystemFontPath();
+	//std::string fontPath = fxed::Font::getDefaultSystemFontPath();
+	std::string fontPath = fxed::Font::findFontPath("FantasqueSansM Nerd Font");
 	dbLog(dbg::LOG_INFO, "Using font: %s", fontPath.c_str());
 
 	auto font = fxed::Font(*nri, window.getMainQueue(), fontPath.data(), 512);
@@ -59,16 +62,20 @@ int main(int argc, char *argv[]) {
 			.buildGraphicsProgram();
 
 	// load argv[1] if exists
-	std::string text;
+	std::u32string text;
 	if (argc > 1) {
 		std::ifstream file(argv[1]);
 		if (file.is_open()) {
-			text.assign((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+			std::ranges::copy(std::ranges::istream_view<fxed::RawChar>(file) | fxed::to_utf32,
+							  std::back_inserter(text));
+
 			file.close();
 		} else {
 			dbLog(dbg::LOG_ERROR, "Failed to open file: %s", argv[1]);
 		}
 	}
+
+	//std::ranges::copy(text | fxed::to_utf8, std::ostream_iterator<char>(std::cout));
 
 	auto				 textMesh = fxed::TextMesh(*nri, window.getMainQueue(), 10000);
 	TextEditor			 textEditor(text);
@@ -120,14 +127,17 @@ int main(int argc, char *argv[]) {
 
 		shader->setPushConstants(cmdBuf, &pushConstants, sizeof(pushConstants), 0);
 
-		std::string text = textEditor.getText();
-		glm::vec2 cursorRealPos;
-		cursorRealPos = textMesh.updateText(std::span<const char>{text.begin(), text.end()}, font, textEditor.getCursorPos());
+		std::u32string text = textEditor.getText();
+		glm::vec2	   cursorRealPos;
+		cursorRealPos =
+			textMesh.updateText(std::span<const char32_t>{text.begin(), text.end()}, font, textEditor.getCursorPos());
 
 		glm::vec2 screenBounds = glm::vec2(pushConstants.viewportSize) / pushConstants.textSize;
-		 // clamp translation to prevent moving text out of screen
-		pushConstants.translation.x = std::clamp<float>(pushConstants.translation.x, -cursorRealPos.x + 1, screenBounds.x - cursorRealPos.x - 1);
-		pushConstants.translation.y = std::clamp<float>(pushConstants.translation.y, -cursorRealPos.y + 1, screenBounds.y - cursorRealPos.y - 1);
+		// clamp translation to prevent moving text out of screen
+		pushConstants.translation.x =
+			std::clamp<float>(pushConstants.translation.x, -cursorRealPos.x + 1, screenBounds.x - cursorRealPos.x - 1);
+		pushConstants.translation.y =
+			std::clamp<float>(pushConstants.translation.y, -cursorRealPos.y + 1, screenBounds.y - cursorRealPos.y - 1);
 
 		textMesh.bind(cmdBuf);
 		textMesh.draw(cmdBuf, *shader);
@@ -135,10 +145,9 @@ int main(int argc, char *argv[]) {
 		PushConstantsCursor cursorPushConstants{
 			.viewportSize = {window.getWidth(), window.getHeight()},
 			.translation  = pushConstants.translation,
-			.cursorPos	   = cursorRealPos,
-			.textSize	   = pushConstants.textSize,
-			.time		   = (textEditorController.milisecondsSinceLastMove() < 200) ? 0 : (float)glfwGetTime()
-		};
+			.cursorPos	  = cursorRealPos,
+			.textSize	  = pushConstants.textSize,
+			.time		  = (textEditorController.milisecondsSinceLastMove() < 200) ? 0 : (float)glfwGetTime()};
 		cursorShader->bind(cmdBuf);
 		cursorShader->setPushConstants(cmdBuf, &cursorPushConstants, sizeof(cursorPushConstants), 0);
 		cursorMesh->bind(cmdBuf);

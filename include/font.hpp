@@ -6,12 +6,13 @@
 #include "utils.hpp"
 
 namespace fxed {
+
+struct Rectangle {
+	int x, y, w, h;
+};
+
 class Font {
 	struct FontData;
-
-	struct Rectangle {
-		int x, y, w, h;
-	};
 
 	struct GlyphBox {
 		int	   index;
@@ -37,8 +38,9 @@ class Font {
 	auto getHandle() { return imageView->getHandle(); }
 
 	GlyphBox getGlyphBox(uint32_t c) const;
-	int getAtlasSize() const { return image->getWidth(); }
+	int		 getAtlasSize() const { return image->getWidth(); }
 
 	static std::string getDefaultSystemFontPath();
+	static std::string findFontPath(std::string_view fontName);
 };
 }	  // namespace fxed

@@ -16,6 +16,6 @@ class TextMesh : public fxed::Mesh {
 	TextMesh(nri::NRI &nri, nri::CommandQueue &q, std::size_t maxCharCount);
 	DELETE_COPY_AND_ASSIGNMENT(TextMesh);
 
-	glm::vec2 updateText(std::span<const char> text, const fxed::Font &font, glm::ivec2 cursorPos = {0, 0});
+	glm::vec2 updateText(std::span<const char32_t> text, const fxed::Font &font, glm::ivec2 cursorPos = {0, 0});
 };
 }	  // namespace fxed
