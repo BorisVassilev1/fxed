@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 20)
 cmake_policy(SET CMP0067 NEW)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wpedantic -fno-omit-frame-pointer -O3 -std=c++20")
+set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wpedantic -fno-omit-frame-pointer -O3")
 
 file(GLOB SOURCE_FILES src/*.cpp)
 
@@ -42,7 +42,7 @@ endif()
 
 set(FT_DISABLE_BZIP2 ON)
 set(FT_DISABLE_HARFBUZZ ON)
-set(FT_DISABLE_PNG ON)
+#set(FT_DISABLE_PNG ON)
 set(FT_DISABLE_ZLIB ON)
 set(FT_DISABLE_BROTLI ON)
 set(BUILD_SHARED_LIBS OFF)
@@ -83,9 +83,11 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug")
     endif ()
 endif()
 target_include_directories(${PROJECT_NAME} PRIVATE include)
+target_include_directories(${PROJECT_NAME} PRIVATE lib/)
 target_link_libraries(${PROJECT_NAME} PRIVATE glfw)
 target_link_libraries(${PROJECT_NAME} PRIVATE glm)
 target_link_libraries(${PROJECT_NAME} PRIVATE msdf-atlas-gen)
+target_link_libraries(${PROJECT_NAME} PRIVATE freetype)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ../

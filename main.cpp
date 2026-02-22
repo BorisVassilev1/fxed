@@ -28,7 +28,7 @@ struct PushConstantsCursor {
 };
 
 int main(int argc, char *argv[]) {
-	// 🐊, 🚀
+	// 🐊
 	auto nri = nri::Factory::getInstance().createNRI("Vulkan", nri::CreateBits::GLFW);
 
 	fxed::Window window(*nri, 800, 600, "Vulkan NRI Window");
@@ -39,10 +39,15 @@ int main(int argc, char *argv[]) {
 	win->clearColor = glm::vec4(30 / 255.f, 30 / 255.f, 46 / 255.f, 1.0f);
 
 	//std::string fontPath = fxed::Font::getDefaultSystemFontPath();
-	std::string fontPath = fxed::Font::findFontPath("FantasqueSansM Nerd Font");
+	std::string fontPath = fxed::FontAtlas::findFontPath("FantasqueSansM Nerd Font");
 	dbLog(dbg::LOG_INFO, "Using font: %s", fontPath.c_str());
 
-	auto font = fxed::Font(*nri, window.getMainQueue(), fontPath.data(), 512);
+	auto fallbackChain = fxed::FontFallbackChain({
+		fontPath, 
+		fxed::FontAtlas::findFontPath("Noto Color Emoji"), // fallback for emojis
+	});
+
+	auto font = fxed::FontAtlas(*nri, window.getMainQueue(), std::move(fallbackChain), 512);
 
 	auto textureHandle = font.getHandle();
 

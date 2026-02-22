@@ -42,12 +42,14 @@ class RowAtlasPacker : public AtlasPacker {
 
 		for (size_t i = 0; i < rowOffsets.size(); i++) {
 			if (rowOffsets[i] + rect.w <= width && (i + 1) * rect.h <= height) {
-				fxed::Rectangle result{.x = (int)rowOffsets[i], .y = (int)i * rect.h, .w = rect.w, .h = rect.h};
+				fxed::Rectangle result{.x = (int)rowOffsets[i], .y = int(i * rowHeight), .w = rect.w, .h = rect.h};
 				rowOffsets[i] += rect.w;
 				return result;
 			}
 		}
 		return std::nullopt;
 	}
+
+	using AtlasPacker::pack;
 };
 }	  // namespace fxed

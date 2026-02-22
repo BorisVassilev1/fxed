@@ -64,7 +64,8 @@ float4 PSMain(PSInput input) : SV_TARGET
 	float largeness = (pushConstants.textSize - 12.f) / 48.0f; // Assuming textSize ranges from 12 to 60
 	largeness = clamp(largeness, 0.0f, 1.0f);
 
-	float Smoothing = lerp(1.0f, 0.5f, largeness);
+	//float Smoothing = lerp(1.0f, 0.5f, largeness);
+	float Smoothing = 1.0f;
 
 	float d = median(texColor.rgb) - 0.5f;
 

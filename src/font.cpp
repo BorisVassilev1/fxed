@@ -3,16 +3,20 @@
 
 #include <msdf-atlas-gen/msdf-atlas-gen.h>
 
-#include "msdf-atlas-gen/GlyphBox.h"
 #include "nri.hpp"
+#include "packing.hpp"
 #include "utils.hpp"
 
-using namespace msdf_atlas;
+#include "ft2build.h"
+#include FT_FREETYPE_H
+
+#define STB_IMAGE_RESIZE_IMPLEMENTATION
+#include "stb_image_resize.h"
+
 using namespace fxed;
 
 static nri::NRI *g_nri = nullptr;
 
-template <class T = float>
 class ImageAtlasStorage {
 	mutable std::unique_ptr<nri::Buffer>	 uploadBuffer;
 	mutable std::unique_ptr<nri::Allocation> uploadBufferAllocation;
@@ -20,8 +24,9 @@ class ImageAtlasStorage {
 	uint32_t								 width;
 	uint32_t								 height;
 
-	const nri::Format format = nri::Format::FORMAT_R32G32B32A32_SFLOAT;
-	const int		  N		 = 4;
+	static const nri::Format format = nri::Format::FORMAT_R32G32B32A32_SFLOAT;
+	static const int		 N		= 4;
+	using T							= float;
 
    public:
 	ImageAtlasStorage(uint32_t width, uint32_t height) : width(width), height(height) {
@@ -68,17 +73,31 @@ class ImageAtlasStorage {
 		}
 	}
 
-	void put(int x, int y, const msdfgen::BitmapConstRef<float, 3> &subBitmap) {
+	void put(int x, int y, const msdfgen::BitmapConstRef<uint8_t, 1> &subBitmap) {
 		assert(data != nullptr);
 		assert(x + subBitmap.width <= width && y + subBitmap.height <= height);		// FIX BOUNDS CHECK
 		for (int j = 0; j < subBitmap.height; ++j) {
 			for (int i = 0; i < subBitmap.width; ++i) {
+				((T *)data)[(y + j) * width * N + (x * N) + i * N + 3] =
+					subBitmap.pixels[j * subBitmap.width + i] / 255.f;
+			}
+		}
+	}
+
+	void put(int x, int y, const msdfgen::BitmapConstRef<uint8_t, 4> &subBitmap) {
+		assert(data != nullptr);
+		assert(x + subBitmap.width <= width && y + subBitmap.height <= height);		// FIX BOUNDS CHECK
+		for (int j = 0; j < subBitmap.height; ++j) {
+			for (int i = 0; i < subBitmap.width; ++i) {
+				uint32_t value = subBitmap.pixels[j * subBitmap.width + i];
 				((T *)data)[(y + j) * width * N + (x * N) + i * N + 0] =
-					subBitmap.pixels[j * subBitmap.width * 3 + i * 3 + 0];
+					subBitmap.pixels[j * subBitmap.width * 4 + i * 4 + 2] / 255.f;
 				((T *)data)[(y + j) * width * N + (x * N) + i * N + 1] =
-					subBitmap.pixels[j * subBitmap.width * 3 + i * 3 + 1];
+					subBitmap.pixels[j * subBitmap.width * 4 + i * 4 + 1] / 255.f;
 				((T *)data)[(y + j) * width * N + (x * N) + i * N + 2] =
-					subBitmap.pixels[j * subBitmap.width * 3 + i * 3 + 2];
+					subBitmap.pixels[j * subBitmap.width * 4 + i * 4 + 0] / 255.f;
+				((T *)data)[(y + j) * width * N + (x * N) + i * N + 3] =
+					subBitmap.pixels[j * subBitmap.width * 4 + i * 4 + 3] / 255.f;
 			}
 		}
 	}
@@ -119,72 +138,133 @@ class ImageAtlasStorage {
 		}
 	}
 
+	void *getDataAt(int x, int y) const {
+		assert(data != nullptr);
+		return (void *)((T *)data + (y * width * N + x * N));
+	}
+
+	uint32_t getStride() const { return width * N * sizeof(T); }
+
 	// this is hack
 	auto &getUploadBuffer() const { return uploadBuffer; }
 	auto &getUploadBufferAllocation() const { return uploadBufferAllocation; }
 };
 
-struct Font::FontData {
-	std::vector<GlyphGeometry> glyphs;
-	FontGeometry			   fontGeometry;
+struct FontAtlas::FontData {
+	// std::vector<msdf_atlas::GlyphGeometry> glyphs;
+	// msdf_atlas::FontGeometry			   fontGeometry;
+	std::vector<std::pair<GlyphBox, int>> glyphBoxes;
 };
 
-Font::Font(nri::NRI &nri, nri::CommandQueue &q, const char *fontfilename, uint32_t atlasSize) : data(new FontData()) {
+struct FontFallbackChain::FontFallbackChainData {
+	std::vector<FT_Face> fontFaces;
+};
+
+uint fontSize = 32;
+
+FontAtlas::FontAtlas(nri::NRI &nri, nri::CommandQueue &q, FontFallbackChain &&fallbackChain, uint32_t atlasSize)
+	: data(new FontData()), fallbackChain(std::move(fallbackChain)) {
 	g_nri = &nri;
 
 	std::unique_ptr<nri::Buffer>	 uploadBuffer;
 	std::unique_ptr<nri::Allocation> uploadBufferAllocation;
 
-	if (msdfgen::FreetypeHandle *ft = msdfgen::initializeFreetype()) {
-		if (msdfgen::FontHandle *font = msdfgen::loadFont(ft, fontfilename)) {
-			data->fontGeometry = FontGeometry(&data->glyphs);
+	atlasSize = 1024;
+	ImageAtlasStorage atlasStorage(atlasSize, atlasSize);
 
-			// The second argument can be ignored unless you mix different font sizes in one atlas.
-			// In the last argument, you can specify a charset other than ASCII.
-			// To load specific glyph indices, use loadGlyphs instead.
+	RowAtlasPacker atlasPacker(atlasSize, atlasSize, fontSize + 2);	   // TODO: make row height configurable
 
-			Charset charset = Charset::ASCII;
-			charset.add(U'�');
-
-			data->fontGeometry.loadCharset(font, 1.0, charset);
-			const double maxCornerAngle = 3.0;
-			for (GlyphGeometry &glyph : data->glyphs)
-				glyph.edgeColoring(&msdfgen::edgeColoringInkTrap, maxCornerAngle, 0);
-
-			TightAtlasPacker packer;
-			packer.setDimensionsConstraint(DimensionsConstraint::SQUARE);
-			packer.setDimensions(atlasSize, atlasSize);
-			// packer.setMinimumScale(24.0);
-			packer.setScale(32.0);
-			packer.setPixelRange(2.0);
-			packer.setMiterLimit(1.0);
-			packer.setInnerPixelPadding(1);
-			packer.pack(data->glyphs.data(), data->glyphs.size());
-			int width = 0, height = 0;
-			packer.getDimensions(width, height);
-
-			ImmediateAtlasGenerator<		 //
-				float,						 //
-				4,							 //
-				mtsdfGenerator,				 //
-				ImageAtlasStorage<float>	 //
-				>
-				generator(width, height);
-			// GeneratorAttributes can be modified to change the generator's default settings.
-			GeneratorAttributes attributes;
-			generator.setAttributes(attributes);
-			generator.setThreadCount(1);
-			// Generate atlas bitmap
-			generator.generate(data->glyphs.data(), data->glyphs.size());
-
-			uploadBuffer		   = std::move(generator.atlasStorage().getUploadBuffer());
-			uploadBufferAllocation = std::move(generator.atlasStorage().getUploadBufferAllocation());
-
-			// Cleanup
-			msdfgen::destroyFont(font);
-		}
-		msdfgen::deinitializeFreetype(ft);
+	auto glyphSet = std::vector<uint32_t>();
+	for (uint32_t c = 33; c < 127; c++) {
+		glyphSet.push_back(c);
 	}
+	glyphSet.push_back(U'🐊');
+	glyphSet.push_back(U'😀');
+	glyphSet.push_back(U'');
+
+	for (uint32_t c : glyphSet) {
+		try {
+			data->glyphBoxes.push_back(this->fallbackChain.getGlyphBox(c));
+
+			auto &box	= data->glyphBoxes.back().first;
+			auto &index = data->glyphBoxes.back().second;
+			auto &face	= this->fallbackChain.data->fontFaces[index];
+
+			char formatname[5] = {0};
+			memcpy(formatname, &face->glyph->format, 4);
+			std::swap(formatname[0], formatname[3]);
+			std::swap(formatname[1], formatname[2]);
+			dbLog(dbg::LOG_DEBUG, "Format of glyph for codepoint ", c, ": ", formatname);
+			if (face->glyph->format == FT_GLYPH_FORMAT_BITMAP) {
+				uint width	= face->glyph->bitmap.width;
+				uint height = face->glyph->bitmap.rows;
+
+				if (height > fontSize) {
+					// resize to fontSize x fontSize
+					double scale = fontSize / (double)height;
+					uint   w	 = (uint)(width * scale);
+					uint   h	 = (uint)(height * scale);
+
+					auto rect = atlasPacker.pack({0, 0, (int)w, (int)h}, 1);
+					if (!rect) {
+						dbLog(dbg::LOG_ERROR, "Failed to pack glyph for codepoint ", c, " with size ", w, "x", h,
+							  " into atlas");
+						continue;
+					}
+					box.rect = *rect;
+
+					std::vector<uint8_t> resizedBitmap(w * h * 4);
+
+					stbir_resize_uint8_generic(face->glyph->bitmap.buffer, width, height, face->glyph->bitmap.pitch,
+											   resizedBitmap.data(), w, h, w * 4, 4, 3, STBIR_FLAG_ALPHA_PREMULTIPLIED,
+											   STBIR_EDGE_ZERO, STBIR_FILTER_DEFAULT, STBIR_COLORSPACE_LINEAR, nullptr);
+					msdfgen::BitmapConstRef<uint8_t, 4> bitmap(resizedBitmap.data(), w, h);
+					atlasStorage.put(box.rect.x, box.rect.y, bitmap);
+
+					continue;
+				}
+			}
+
+			// regular packing
+			auto rect = atlasPacker.pack(box.rect, 1);
+			if (!rect) {
+				dbLog(dbg::LOG_ERROR, "Failed to pack glyph for codepoint ", c, " with size ", box.rect.w, "x",
+					  box.rect.h, " into atlas");
+				continue;
+			}
+			box.rect = *rect;
+
+			if (face->glyph->format == FT_GLYPH_FORMAT_OUTLINE)
+				if (int e = FT_Render_Glyph(face->glyph, FT_RENDER_MODE_NORMAL)) {
+					dbLog(dbg::LOG_ERROR, "Failed to render glyph for codepoint ", c, " error: 0x", std::hex, e,
+						  std::dec);
+					continue;
+				}
+
+			switch (face->glyph->bitmap.pixel_mode) {
+				case FT_PIXEL_MODE_GRAY: {
+					msdfgen::BitmapConstRef<uint8_t, 1> bitmap((const uint8_t *)face->glyph->bitmap.buffer,
+															   face->glyph->bitmap.width, face->glyph->bitmap.rows);
+					atlasStorage.put(box.rect.x, box.rect.y, bitmap);
+				} break;
+				case FT_PIXEL_MODE_BGRA: {
+					msdfgen::BitmapConstRef<uint8_t, 4> bitmap((const uint8_t *)face->glyph->bitmap.buffer,
+															   face->glyph->bitmap.width, face->glyph->bitmap.rows);
+					atlasStorage.put(box.rect.x, box.rect.y, bitmap);
+				} break;
+				default: {
+					dbLog(dbg::LOG_ERROR, "Unsupported pixel mode for glyph of codepoint ", c, ": ",
+						  (int)face->glyph->bitmap.pixel_mode);
+				} break;
+			}
+
+		} catch (const std::exception &e) {
+			dbLog(dbg::LOG_WARNING, "Glyph for codepoint ", c,
+				  " not found in any font in the fallback chain: ", e.what());
+		}
+	}
+	uploadBuffer		   = std::move(atlasStorage.getUploadBuffer());
+	uploadBufferAllocation = std::move(atlasStorage.getUploadBufferAllocation());
 
 	if (uploadBuffer == nullptr || uploadBufferAllocation == nullptr) {
 		dbLog(dbg::LOG_ERROR, "Failed to create font image: upload buffer is null");
@@ -210,34 +290,81 @@ Font::Font(nri::NRI &nri, nri::CommandQueue &q, const char *fontfilename, uint32
 	auto key = q.submit(*commandBuffer);
 	q.wait(key);
 }
-Font::~Font() { delete data; }
+
+FontAtlas::~FontAtlas() { delete data; }
 
 static const int tabSize = 4;
 
-Font::GlyphBox Font::getGlyphBox(uint32_t c) const {
-	bool isTab = (c == '\t');
-	if (isTab) c = ' ';
-	const msdf_atlas::GlyphGeometry *bp = nullptr;
-	bp									= data->fontGeometry.getGlyph(c);
-	if (bp == nullptr) {
-		c  = U'�';	   // Fallback to replacement character
-		bp = data->fontGeometry.getGlyph(c);
+fxed::GlyphBox FontAtlas::getGlyphBox(uint32_t c) const {
+	// TODO:
+}
+
+FontFallbackChain::FontFallbackChain(const std::vector<std::string_view> &fonts) : data(new FontFallbackChainData()) {
+	FT_Library ft;
+	if (FT_Init_FreeType(&ft)) { THROW_RUNTIME_ERR("Could not initialize FreeType library!"); }
+
+	for (const auto &fontPath : fonts) {
+		FT_Face face;
+		if (FT_New_Face(ft, fontPath.data(), 0, &face)) {
+			dbLog(dbg::LOG_ERROR, "Failed to load font face from path: ", fontPath);
+			continue;
+		}
+		dbLog(dbg::LOG_INFO, "Loaded font face from path: ", fontPath);
+
+		dbLog(dbg::LOG_DEBUG, "Font face ", fontPath, " has ", face->num_glyphs, " glyphs");
+		dbLog(dbg::LOG_DEBUG, "Font face ", fontPath, " has ", face->num_fixed_sizes, " fixed sizes");
+		for (int i = 0; i < face->num_fixed_sizes; i++) {
+			dbLog(dbg::LOG_DEBUG, "strike ", i, ": ", face->available_sizes[i].width, "x",
+				  face->available_sizes[i].height);
+		}
+
+		data->fontFaces.push_back(face);
 	}
-	if (bp == nullptr) {
-		c  = U'?';	   // Fallback to question mark if replacement character is also missing
-		bp = data->fontGeometry.getGlyph(c);
+}
+
+std::pair<fxed::GlyphBox, int> FontFallbackChain::getGlyphBox(uint32_t c) const {
+	for (unsigned int i = 0; i < data->fontFaces.size(); i++) {
+		FT_Face &face	   = data->fontFaces[i];
+		FT_UInt	 loadFlags = FT_LOAD_DEFAULT;
+
+		FT_UInt glyphIndex = FT_Get_Char_Index(face, c);
+
+		if (FT_HAS_COLOR(face)) {
+			loadFlags |= FT_LOAD_COLOR;
+			if (FT_HAS_FIXED_SIZES(face)) {
+				FT_Select_Size(face, 0);	 // TODO: make size selection smarter
+				dbLog(dbg::LOG_DEBUG, "Selected size: ", face->available_sizes[0].width, "x",
+					  face->available_sizes[0].height);
+			}
+		} else {
+			FT_Set_Pixel_Sizes(face, 0, fontSize);	   // TODO: make size selection smarter
+		}
+
+		if (glyphIndex != 0) {
+			uint e = FT_Load_Glyph(face, glyphIndex, loadFlags);
+			if (e) {
+				dbLog(dbg::LOG_ERROR, "Failed to load glyph for codepoint ", c, " in font index ", i, " error: 0x",
+					  std::hex, e, std::dec);
+				continue;
+			}
+			GlyphBox box{.index	  = (int)glyphIndex,
+						 .advance = face->glyph->advance.x / 64.0,
+						 .bounds  = {face->glyph->metrics.horiBearingX / 64.0, face->glyph->metrics.horiBearingY / 64.0,
+									 (face->glyph->metrics.horiBearingX + face->glyph->metrics.width) / 64.0,
+									 (face->glyph->metrics.horiBearingY - face->glyph->metrics.height) / 64.0},
+						 .rect	  = {0, 0, (int)face->glyph->bitmap.width, (int)face->glyph->bitmap.rows}};
+
+			return {box, i};
+		}
 	}
-	if (bp == nullptr) { THROW_RUNTIME_ERR(std::format("Glyph '{}' not found in font!", c)); }
-	msdf_atlas::GlyphBox gb = *bp;
-	GlyphBox			 box{.index	  = gb.index,
-							 .advance = gb.advance,
-							 .bounds  = {gb.bounds.l, gb.bounds.b, gb.bounds.r, gb.bounds.t},
-							 .rect	  = {gb.rect.x, gb.rect.y, gb.rect.w, gb.rect.h}};
-	if (isTab) {
-		box.advance *= tabSize;
-		box.bounds.r *= tabSize;
+	THROW_RUNTIME_ERR(std::format("Glyph '{}' not found in any font in the fallback chain!", c));
+}
+
+FontFallbackChain::~FontFallbackChain() {
+	for (auto &face : data->fontFaces) {
+		FT_Done_Face(face);
 	}
-	return box;
+	delete data;
 }
 
 #ifdef _WIN32
@@ -245,7 +372,7 @@ Font::GlyphBox Font::getGlyphBox(uint32_t c) const {
 	#include <shlobj.h>
 	#include <string>
 
-std::string findWindowsFontPath(const std::string_view &fontName) {
+static std::string findWindowsFontPath(const std::string_view &fontName) {
 	char fontsPath[MAX_PATH];
 
 	// Get Windows Fonts directory
@@ -266,7 +393,7 @@ std::string findWindowsFontPath(const std::string_view &fontName) {
 	#include <fontconfig/fontconfig.h>
 	#include <string>
 
-std::string findLinuxFontPath(const std::string_view &fontName) {
+static std::string findLinuxFontPath(const std::string_view &fontName) {
 	std::string fontPath;
 
 	FcConfig  *config  = FcInitLoadConfigAndFonts();
@@ -291,7 +418,7 @@ std::string findLinuxFontPath(const std::string_view &fontName) {
 }
 #endif
 
-std::string Font::findFontPath(std::string_view fontName) {
+std::string FontAtlas::findFontPath(std::string_view fontName) {
 	std::string result;
 #ifdef _WIN32
 	result = findWindowsFontPath(fontName);
@@ -304,7 +431,7 @@ std::string Font::findFontPath(std::string_view fontName) {
 	return result;
 }
 
-std::string Font::getDefaultSystemFontPath() {
+std::string FontAtlas::getDefaultSystemFontPath() {
 #ifdef _WIN32
 	return findWindowsFontPath("segoeui");
 #elif __linux__
