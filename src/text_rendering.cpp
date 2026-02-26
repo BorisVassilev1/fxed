@@ -17,14 +17,13 @@ TextMesh::TextMesh(nri::NRI &nri, nri::CommandQueue &q, std::size_t maxCharCount
 
 glm::vec2 TextMesh::updateText(std::span<const char32_t> text, const fxed::FontAtlas &font, glm::ivec2 cursorPos) {
 	glm::vec2 cursorPosResult = cursorPos;
-	size_t offset	  = 0;
-	size_t indexCount = 0;
-	int advanceY	  = 0;
-	int advanceX	  = 0;
-	double advance	  = 0.0;
+	size_t	  offset		  = 0;
+	size_t	  indexCount	  = 0;
+	int		  advanceY		  = 0;
+	int		  advanceX		  = 0;
+	double	  advance		  = 0.0;
 
-	const double pixel = 1.0 / 24.0;	 // font size
-	size_t		 j	   = 0;
+	size_t j = 0;
 	for (size_t i = 0; i < text.size(); i++) {
 		if (j >= maxCharCount) {
 			dbLog(dbg::LOG_WARNING, "TextMesh max character count exceeded, truncating text");
@@ -32,21 +31,26 @@ glm::vec2 TextMesh::updateText(std::span<const char32_t> text, const fxed::FontA
 		}
 		if (text[i] == '\n') {
 			advanceY += 1;
-			advance = 0.0;
+			advance	 = 0.0;
 			advanceX = 0;
 			continue;
 		}
 
 		auto box = font.getGlyphBox(text[i]);
-		if (!std::isspace(text[i])) {
-			vertexData[4 * j + 0].x = advance + box.bounds.l - pixel;
-			vertexData[4 * j + 0].y = advanceY - box.bounds.t + pixel;
-			vertexData[4 * j + 1].x = advance + box.bounds.l - pixel;
-			vertexData[4 * j + 1].y = advanceY - box.bounds.b + pixel;
-			vertexData[4 * j + 2].x = advance + box.bounds.r - pixel;
-			vertexData[4 * j + 2].y = advanceY - box.bounds.b + pixel;
-			vertexData[4 * j + 3].x = advance + box.bounds.r - pixel;
-			vertexData[4 * j + 3].y = advanceY - box.bounds.t + pixel;
+		if (text[i] > 255 || !std::isspace(text[i])) {
+			if (text[i] == U'🚀') {
+				dbLog(dbg::LOG_DEBUG, "Glyph box for codepoint ", (int)text[i], ": advance=", box.advance,
+					  " bounds=", box.bounds.l, ",", box.bounds.t, ",", box.bounds.r, ",", box.bounds.b,
+					  " rect=", box.rect.x, ",", box.rect.y, ",", box.rect.w, ",", box.rect.h);
+			}
+			vertexData[4 * j + 0].x = advance + box.bounds.l;
+			vertexData[4 * j + 0].y = advanceY - box.bounds.t;
+			vertexData[4 * j + 1].x = advance + box.bounds.l;
+			vertexData[4 * j + 1].y = advanceY - box.bounds.b;
+			vertexData[4 * j + 2].x = advance + box.bounds.r;
+			vertexData[4 * j + 2].y = advanceY - box.bounds.b;
+			vertexData[4 * j + 3].x = advance + box.bounds.r;
+			vertexData[4 * j + 3].y = advanceY - box.bounds.t;
 
 			indexData[6 * j + 0] = offset + 0;
 			indexData[6 * j + 1] = offset + 1;
@@ -55,14 +59,14 @@ glm::vec2 TextMesh::updateText(std::span<const char32_t> text, const fxed::FontA
 			indexData[6 * j + 4] = offset + 3;
 			indexData[6 * j + 5] = offset + 0;
 
-			vertexData[4 * j + 0].u = (box.rect.x + 1) / (float)font.getAtlasSize();
-			vertexData[4 * j + 0].v = (box.rect.y + box.rect.h - 1) / (float)font.getAtlasSize();
-			vertexData[4 * j + 1].u = (box.rect.x + 1) / (float)font.getAtlasSize();
-			vertexData[4 * j + 1].v = (box.rect.y + 1) / (float)font.getAtlasSize();
-			vertexData[4 * j + 2].u = (box.rect.x + box.rect.w - 1) / (float)font.getAtlasSize();
-			vertexData[4 * j + 2].v = (box.rect.y + 1) / (float)font.getAtlasSize();
-			vertexData[4 * j + 3].u = (box.rect.x + box.rect.w - 1) / (float)font.getAtlasSize();
-			vertexData[4 * j + 3].v = (box.rect.y + box.rect.h - 1) / (float)font.getAtlasSize();
+			vertexData[4 * j + 0].u = (box.rect.x) / (float)font.getAtlasSize();
+			vertexData[4 * j + 0].v = (box.rect.y + box.rect.h) / (float)font.getAtlasSize();
+			vertexData[4 * j + 1].u = (box.rect.x) / (float)font.getAtlasSize();
+			vertexData[4 * j + 1].v = (box.rect.y) / (float)font.getAtlasSize();
+			vertexData[4 * j + 2].u = (box.rect.x + box.rect.w) / (float)font.getAtlasSize();
+			vertexData[4 * j + 2].v = (box.rect.y) / (float)font.getAtlasSize();
+			vertexData[4 * j + 3].u = (box.rect.x + box.rect.w) / (float)font.getAtlasSize();
+			vertexData[4 * j + 3].v = (box.rect.y + box.rect.h) / (float)font.getAtlasSize();
 			offset += 4;
 			indexCount += 6;
 			++j;
@@ -70,9 +74,7 @@ glm::vec2 TextMesh::updateText(std::span<const char32_t> text, const fxed::FontA
 
 		advanceX += 1;
 		advance += box.advance;
-		if(cursorPos.x == advanceX && cursorPos.y == advanceY) {
-			cursorPosResult = glm::vec2(advance, advanceY);
-		}
+		if (cursorPos.x == advanceX && cursorPos.y == advanceY) { cursorPosResult = glm::vec2(advance, advanceY); }
 	}
 
 	this->indexCount = static_cast<uint32_t>(indexCount);

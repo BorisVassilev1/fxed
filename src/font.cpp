@@ -154,13 +154,14 @@ struct FontAtlas::FontData {
 	// std::vector<msdf_atlas::GlyphGeometry> glyphs;
 	// msdf_atlas::FontGeometry			   fontGeometry;
 	std::vector<std::pair<GlyphBox, int>> glyphBoxes;
+	std::map<uint32_t, int>				  codepointToGlyphBoxIndex;
 };
 
 struct FontFallbackChain::FontFallbackChainData {
 	std::vector<FT_Face> fontFaces;
 };
 
-uint fontSize = 32;
+uint fontSize = 12;
 
 FontAtlas::FontAtlas(nri::NRI &nri, nri::CommandQueue &q, FontFallbackChain &&fallbackChain, uint32_t atlasSize)
 	: data(new FontData()), fallbackChain(std::move(fallbackChain)) {
@@ -172,14 +173,16 @@ FontAtlas::FontAtlas(nri::NRI &nri, nri::CommandQueue &q, FontFallbackChain &&fa
 	atlasSize = 1024;
 	ImageAtlasStorage atlasStorage(atlasSize, atlasSize);
 
-	RowAtlasPacker atlasPacker(atlasSize, atlasSize, fontSize + 2);	   // TODO: make row height configurable
+	RowAtlasPacker atlasPacker(atlasSize, atlasSize, fontSize + 2);		// TODO: make row height configurable
 
 	auto glyphSet = std::vector<uint32_t>();
-	for (uint32_t c = 33; c < 127; c++) {
+	for (uint32_t c = 32; c < 127; c++) {
 		glyphSet.push_back(c);
 	}
 	glyphSet.push_back(U'🐊');
 	glyphSet.push_back(U'😀');
+	glyphSet.push_back(U'🚀');
+	glyphSet.push_back(U'🔔');
 	glyphSet.push_back(U'');
 
 	for (uint32_t c : glyphSet) {
@@ -189,6 +192,8 @@ FontAtlas::FontAtlas(nri::NRI &nri, nri::CommandQueue &q, FontFallbackChain &&fa
 			auto &box	= data->glyphBoxes.back().first;
 			auto &index = data->glyphBoxes.back().second;
 			auto &face	= this->fallbackChain.data->fontFaces[index];
+
+			data->codepointToGlyphBoxIndex[c] = (int)data->glyphBoxes.size() - 1;
 
 			char formatname[5] = {0};
 			memcpy(formatname, &face->glyph->format, 4);
@@ -202,6 +207,7 @@ FontAtlas::FontAtlas(nri::NRI &nri, nri::CommandQueue &q, FontFallbackChain &&fa
 				if (height > fontSize) {
 					// resize to fontSize x fontSize
 					double scale = fontSize / (double)height;
+					double scale2 = 1.0 / (double)height;
 					uint   w	 = (uint)(width * scale);
 					uint   h	 = (uint)(height * scale);
 
@@ -212,6 +218,12 @@ FontAtlas::FontAtlas(nri::NRI &nri, nri::CommandQueue &q, FontFallbackChain &&fa
 						continue;
 					}
 					box.rect = *rect;
+
+					box.bounds.b *= scale2;
+					box.bounds.l *= scale2;
+					box.bounds.r *= scale2;
+					box.bounds.t *= scale2;
+					box.advance *= scale2;
 
 					std::vector<uint8_t> resizedBitmap(w * h * 4);
 
@@ -233,6 +245,12 @@ FontAtlas::FontAtlas(nri::NRI &nri, nri::CommandQueue &q, FontFallbackChain &&fa
 				continue;
 			}
 			box.rect = *rect;
+
+			box.bounds.b /= fontSize;
+			box.bounds.l /= fontSize;
+			box.bounds.r /= fontSize;
+			box.bounds.t /= fontSize;
+			box.advance /= fontSize;
 
 			if (face->glyph->format == FT_GLYPH_FORMAT_OUTLINE)
 				if (int e = FT_Render_Glyph(face->glyph, FT_RENDER_MODE_NORMAL)) {
@@ -296,7 +314,19 @@ FontAtlas::~FontAtlas() { delete data; }
 static const int tabSize = 4;
 
 fxed::GlyphBox FontAtlas::getGlyphBox(uint32_t c) const {
-	// TODO:
+	auto it = data->codepointToGlyphBoxIndex.find(c);
+	if (it != data->codepointToGlyphBoxIndex.end()) {
+		return data->glyphBoxes[it->second].first;
+	} else if (c == U'\t') {
+		return GlyphBox{
+			.index	 = -1,
+			.advance = (double)tabSize,		// TODO: make tab size configurable
+			.bounds	 = {0, 0, (double)tabSize, 0},
+			.rect	 = {0, 0, 0, 0},
+		};
+	} else {
+		THROW_RUNTIME_ERR(std::format("Glyph '{}' not found in font atlas!", c));
+	}
 }
 
 FontFallbackChain::FontFallbackChain(const std::vector<std::string_view> &fonts) : data(new FontFallbackChainData()) {

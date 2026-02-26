@@ -16,7 +16,7 @@ struct PushConstants {
 	glm::ivec2			viewportSize;
 	glm::ivec2			translation = {0, 0};
 	nri::ResourceHandle textureHandle;
-	float				textSize = 24.0f;
+	float				textSize = 12.0f;
 };
 
 struct PushConstantsCursor {
@@ -28,9 +28,13 @@ struct PushConstantsCursor {
 };
 
 int main(int argc, char *argv[]) {
-	// 🐊
+	// 🚀 asd
+	// 🐊 
+	// 🐊 
+	// 🐊 
 	auto nri = nri::Factory::getInstance().createNRI("Vulkan", nri::CreateBits::GLFW);
-
+	//
+	// 🔔 asd
 	fxed::Window window(*nri, 800, 600, "Vulkan NRI Window");
 
 	// glfwSetWindowAttrib(window.getHandle(), GLFW_DECORATED, !glfwGetWindowAttrib(window.getHandle(),
@@ -39,7 +43,7 @@ int main(int argc, char *argv[]) {
 	win->clearColor = glm::vec4(30 / 255.f, 30 / 255.f, 46 / 255.f, 1.0f);
 
 	//std::string fontPath = fxed::Font::getDefaultSystemFontPath();
-	std::string fontPath = fxed::FontAtlas::findFontPath("FantasqueSansM Nerd Font");
+	std::string fontPath = fxed::FontAtlas::findFontPath("FantasqueSansM Nerd Font:weight=regular");
 	dbLog(dbg::LOG_INFO, "Using font: %s", fontPath.c_str());
 
 	auto fallbackChain = fxed::FontFallbackChain({
@@ -92,7 +96,7 @@ int main(int argc, char *argv[]) {
 		.viewportSize  = {window.getWidth(), window.getHeight()},
 		.translation   = {0, 0},
 		.textureHandle = textureHandle,
-		.textSize	   = 24.0f,
+		.textSize	   = 12.0f,
 	};
 
 	auto resizeCallback = [&](GLFWwindow *, int w, int h) { pushConstants.viewportSize = {w, h}; };

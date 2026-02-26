@@ -78,6 +78,9 @@ float4 PSMain(PSInput input) : SV_TARGET
 	//float4 outsideColor = float4(0,0,0, 1.0);
 	float4 color = lerp(outsideColor, insideColor, w);
 
+	color.xyz = float3(1.0, 1.0, 1.0) * texColor.a; // Premultiply alpha for better blending
+	color.w = texColor.a;
+
 	// Calculate screen-space derivatives for proper antialiasing
 
 	// gamma correction
