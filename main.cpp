@@ -52,7 +52,7 @@ int main(int argc, char *argv[]) {
 		fxed::FontAtlas::findFontPath("Noto Color Emoji"),	   // fallback for emojis
 	});
 
-	auto font = fxed::FontAtlas(*nri, window.getMainQueue(), std::move(fallbackChain), 512);
+	auto font = fxed::FontAtlas(*nri, window.getMainQueue(), std::move(fallbackChain), 512, 20);
 
 	auto textureHandle = font.getHandle();
 
@@ -111,9 +111,11 @@ int main(int argc, char *argv[]) {
 		if (action == GLFW_PRESS || action == GLFW_REPEAT) {
 			if (mods & GLFW_MOD_CONTROL) {
 				if (key == GLFW_KEY_KP_ADD || key == GLFW_KEY_EQUAL) {
-					pushConstants.textSize += 1;
+					pushConstants.textSize += 2;
+					font.resize((uint32_t)pushConstants.textSize);
 				} else if (key == GLFW_KEY_KP_SUBTRACT || key == GLFW_KEY_MINUS) {
-					pushConstants.textSize -= 1;
+					pushConstants.textSize -= 2;
+					font.resize((uint32_t)pushConstants.textSize);
 				}
 			}
 		}
@@ -140,6 +142,7 @@ int main(int argc, char *argv[]) {
 
 		std::u32string text = textEditor.getText();
 		glm::vec2	   cursorRealPos;
+		font.syncWithGPU();
 		cursorRealPos =
 			textMesh.updateText(std::span<const char32_t>{text.begin(), text.end()}, font, textEditor.getCursorPos());
 

@@ -722,7 +722,7 @@ VulkanTexture2D::VulkanTexture2D(VulkanNRI &nri, VulkanImage2D &image2D)
 		vk::ImageSubresourceRange(image2D.getAspectFlags(), 0, 1, 0, 1));
 	imageView = vk::raii::ImageView(nri.getDevice(), imageViewInfo);
 
-	vk::SamplerCreateInfo samplerInfo({}, vk::Filter::eLinear, vk::Filter::eLinear, vk::SamplerMipmapMode::eLinear,
+	vk::SamplerCreateInfo samplerInfo({}, vk::Filter::eNearest, vk::Filter::eNearest, vk::SamplerMipmapMode::eNearest,
 									  vk::SamplerAddressMode::eClampToEdge, vk::SamplerAddressMode::eClampToEdge,
 									  vk::SamplerAddressMode::eClampToEdge, 0.0f, VK_FALSE, 1.0f, VK_FALSE,
 									  vk::CompareOp::eAlways, 0.0f, 0.0f, vk::BorderColor::eFloatTransparentBlack,

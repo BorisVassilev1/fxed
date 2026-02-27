@@ -15,7 +15,7 @@ TextMesh::TextMesh(nri::NRI &nri, nri::CommandQueue &q, std::size_t maxCharCount
 	}
 }
 
-glm::vec2 TextMesh::updateText(std::span<const char32_t> text, const fxed::FontAtlas &font, glm::ivec2 cursorPos) {
+glm::vec2 TextMesh::updateText(std::span<const char32_t> text, fxed::FontAtlas &font, glm::ivec2 cursorPos) {
 	glm::vec2 cursorPosResult = cursorPos;
 	size_t	  offset		  = 0;
 	size_t	  indexCount	  = 0;

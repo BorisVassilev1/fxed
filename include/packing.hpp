@@ -1,5 +1,12 @@
 #pragma once
-#include <font.hpp>
+
+#include <cassert>
+#include <cstdint>
+#include <optional>
+#include <vector>
+
+#include "font_data.hpp"
+
 namespace fxed {
 class AtlasPacker {
    protected:
@@ -23,6 +30,8 @@ class AtlasPacker {
 		}
 		return result;
 	}
+
+	virtual void clear() = 0;
 };
 
 class RowAtlasPacker : public AtlasPacker {
@@ -51,5 +60,13 @@ class RowAtlasPacker : public AtlasPacker {
 	}
 
 	using AtlasPacker::pack;
+
+	void clear() override { std::fill(rowOffsets.begin(), rowOffsets.end(), 0); }
+	void setRowHeight(uint32_t newRowHeight) {
+		assert(newRowHeight > 0 && newRowHeight <= height);
+		rowHeight = newRowHeight;
+		rowOffsets.clear();
+		rowOffsets.resize(height / rowHeight, 0);
+	}
 };
 }	  // namespace fxed
