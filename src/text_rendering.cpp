@@ -38,11 +38,6 @@ glm::vec2 TextMesh::updateText(std::span<const char32_t> text, const fxed::FontA
 
 		auto box = font.getGlyphBox(text[i]);
 		if (text[i] > 255 || !std::isspace(text[i])) {
-			if (text[i] == U'🚀') {
-				dbLog(dbg::LOG_DEBUG, "Glyph box for codepoint ", (int)text[i], ": advance=", box.advance,
-					  " bounds=", box.bounds.l, ",", box.bounds.t, ",", box.bounds.r, ",", box.bounds.b,
-					  " rect=", box.rect.x, ",", box.rect.y, ",", box.rect.w, ",", box.rect.h);
-			}
 			vertexData[4 * j + 0].x = advance + box.bounds.l;
 			vertexData[4 * j + 0].y = advanceY - box.bounds.t;
 			vertexData[4 * j + 1].x = advance + box.bounds.l;

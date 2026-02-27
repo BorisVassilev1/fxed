@@ -161,7 +161,7 @@ struct FontFallbackChain::FontFallbackChainData {
 	std::vector<FT_Face> fontFaces;
 };
 
-uint fontSize = 12;
+uint fontSize = 20;
 
 FontAtlas::FontAtlas(nri::NRI &nri, nri::CommandQueue &q, FontFallbackChain &&fallbackChain, uint32_t atlasSize)
 	: data(new FontData()), fallbackChain(std::move(fallbackChain)) {
@@ -195,21 +195,21 @@ FontAtlas::FontAtlas(nri::NRI &nri, nri::CommandQueue &q, FontFallbackChain &&fa
 
 			data->codepointToGlyphBoxIndex[c] = (int)data->glyphBoxes.size() - 1;
 
-			char formatname[5] = {0};
-			memcpy(formatname, &face->glyph->format, 4);
-			std::swap(formatname[0], formatname[3]);
-			std::swap(formatname[1], formatname[2]);
-			dbLog(dbg::LOG_DEBUG, "Format of glyph for codepoint ", c, ": ", formatname);
+			// char formatname[5] = {0};
+			// memcpy(formatname, &face->glyph->format, 4);
+			// std::swap(formatname[0], formatname[3]);
+			// std::swap(formatname[1], formatname[2]);
+			// dbLog(dbg::LOG_DEBUG, "Format of glyph for codepoint ", c, ": ", formatname);
 			if (face->glyph->format == FT_GLYPH_FORMAT_BITMAP) {
 				uint width	= face->glyph->bitmap.width;
 				uint height = face->glyph->bitmap.rows;
 
 				if (height > fontSize) {
 					// resize to fontSize x fontSize
-					double scale = fontSize / (double)height;
+					double scale  = fontSize / (double)height;
 					double scale2 = 1.0 / (double)height;
-					uint   w	 = (uint)(width * scale);
-					uint   h	 = (uint)(height * scale);
+					uint   w	  = (uint)(width * scale);
+					uint   h	  = (uint)(height * scale);
 
 					auto rect = atlasPacker.pack({0, 0, (int)w, (int)h}, 1);
 					if (!rect) {
@@ -318,12 +318,11 @@ fxed::GlyphBox FontAtlas::getGlyphBox(uint32_t c) const {
 	if (it != data->codepointToGlyphBoxIndex.end()) {
 		return data->glyphBoxes[it->second].first;
 	} else if (c == U'\t') {
-		return GlyphBox{
-			.index	 = -1,
-			.advance = (double)tabSize,		// TODO: make tab size configurable
-			.bounds	 = {0, 0, (double)tabSize, 0},
-			.rect	 = {0, 0, 0, 0},
-		};
+		auto spaceBox = getGlyphBox(U' ');
+		return GlyphBox{.index	 = -1,
+						.advance = spaceBox.advance * tabSize,
+						.bounds	 = {0, spaceBox.bounds.t, spaceBox.advance * tabSize, spaceBox.bounds.b},
+						.rect	 = {0, 0, 0, 0}};
 	} else {
 		THROW_RUNTIME_ERR(std::format("Glyph '{}' not found in font atlas!", c));
 	}
@@ -363,8 +362,8 @@ std::pair<fxed::GlyphBox, int> FontFallbackChain::getGlyphBox(uint32_t c) const 
 			loadFlags |= FT_LOAD_COLOR;
 			if (FT_HAS_FIXED_SIZES(face)) {
 				FT_Select_Size(face, 0);	 // TODO: make size selection smarter
-				dbLog(dbg::LOG_DEBUG, "Selected size: ", face->available_sizes[0].width, "x",
-					  face->available_sizes[0].height);
+				// dbLog(dbg::LOG_DEBUG, "Selected size: ", face->available_sizes[0].width, "x",
+				//	  face->available_sizes[0].height);
 			}
 		} else {
 			FT_Set_Pixel_Sizes(face, 0, fontSize);	   // TODO: make size selection smarter
@@ -391,6 +390,7 @@ std::pair<fxed::GlyphBox, int> FontFallbackChain::getGlyphBox(uint32_t c) const 
 }
 
 FontFallbackChain::~FontFallbackChain() {
+	if (data == nullptr) { return; }
 	for (auto &face : data->fontFaces) {
 		FT_Done_Face(face);
 	}

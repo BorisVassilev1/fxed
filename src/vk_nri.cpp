@@ -305,12 +305,14 @@ void VulkanNRI::createInstance() {
 	vk::InstanceCreateInfo createInfo({}, &appInfo);
 
 	if (enableValidationLayers) {
-		if (!checkValidationLayerSupport()) {
-			throw std::runtime_error("Validation layers requested, but not available!");
+		if (checkValidationLayerSupport()) {
+			createInfo.enabledLayerCount   = static_cast<uint32_t>(validationLayers.size());
+			createInfo.ppEnabledLayerNames = validationLayers.data();
+		} else {
+			dbLog(dbg::LOG_WARNING, "Validation layers requested, but not available!");
+			createInfo.enabledLayerCount   = 0;
+			createInfo.ppEnabledLayerNames = nullptr;
 		}
-
-		createInfo.enabledLayerCount   = static_cast<uint32_t>(validationLayers.size());
-		createInfo.ppEnabledLayerNames = validationLayers.data();
 	} else {
 		createInfo.enabledLayerCount = 0;
 	}
@@ -1291,8 +1293,8 @@ std::unique_ptr<GraphicsProgram> VulkanProgramBuilder::buildGraphicsProgram() {
 														   VK_FALSE, VK_FALSE);
 
 	vk::PipelineColorBlendAttachmentState colorBlendAttachment(
-		VK_TRUE, vk::BlendFactor::eOne, vk::BlendFactor::eOneMinusSrcAlpha, vk::BlendOp::eAdd,
-		vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
+		VK_TRUE, vk::BlendFactor::eOne, vk::BlendFactor::eOneMinusSrcAlpha, vk::BlendOp::eAdd, vk::BlendFactor::eOne,
+		vk::BlendFactor::eZero, vk::BlendOp::eAdd,
 		vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB |
 			vk::ColorComponentFlagBits::eA);
 
@@ -1303,18 +1305,18 @@ std::unique_ptr<GraphicsProgram> VulkanProgramBuilder::buildGraphicsProgram() {
 														vk::DynamicState::eBlendConstants};
 	vk::PipelineDynamicStateCreateInfo dynamicStateInfo({}, dynamicStates.size(), dynamicStates.data());
 
-	vk::PipelineDepthStencilStateCreateInfo depthStencilInfo({}, VK_FALSE, VK_FALSE, vk::CompareOp::eLess, VK_FALSE,
-															 VK_FALSE, vk::StencilOpState(), vk::StencilOpState(), 0.0f,
-															 1.0f);
+	// vk::PipelineDepthStencilStateCreateInfo depthStencilInfo({}, VK_FALSE, VK_FALSE, vk::CompareOp::eLess, VK_FALSE,
+	//														 VK_FALSE, vk::StencilOpState(), vk::StencilOpState(), 0.0f,
+	//														 1.0f);
 
 	vk::Format						colorFormat = vk::Format::eB8G8R8A8Unorm;
-	vk::PipelineRenderingCreateInfo pipelineRenderingInfo(0, 1, &colorFormat, vk::Format::eD32Sfloat);
+	vk::PipelineRenderingCreateInfo pipelineRenderingInfo(0, 1, &colorFormat);
 
 	vk::GraphicsPipelineCreateInfo pipelineInfo(
 		{}, static_cast<uint32_t>(shaderStages.size()), shaderStages.data(), &vertexInputInfo, &inputAssemblyInfo,
 		nullptr,	 // tessellation
-		&viewportStateInfo, &rasterizerInfo, &multisampleInfo, &depthStencilInfo, &colorBlending, &dynamicStateInfo,
-		*pipelineLayout, vk::RenderPass(nullptr), 0, nullptr, -1, &pipelineRenderingInfo);
+		&viewportStateInfo, &rasterizerInfo, &multisampleInfo, {}, &colorBlending, &dynamicStateInfo, *pipelineLayout,
+		vk::RenderPass(nullptr), 0, nullptr, -1, &pipelineRenderingInfo);
 
 	auto pipelines = nri.getDevice().createGraphicsPipelines(nullptr, {pipelineInfo});
 	return std::make_unique<VulkanGraphicsProgram>(nri, std::move(pipelines[0]), std::move(pipelineLayout));

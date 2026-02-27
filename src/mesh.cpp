@@ -95,7 +95,7 @@ std::vector<nri::VertexBinding> Mesh::getVertexBindings() {
 		 (2 + 2) * sizeof(float),
 		 nri::VertexInputRate::VERTEX_INPUT_RATE_VERTEX,
 		 {
-			 {0, nri::Format::FORMAT_R32G32B32_SFLOAT, 0, nri::VertexInputRate::VERTEX_INPUT_RATE_VERTEX, "POSITION"},
+			 {0, nri::Format::FORMAT_R32G32_SFLOAT, 0, nri::VertexInputRate::VERTEX_INPUT_RATE_VERTEX, "POSITION"},
 			 {1, nri::Format::FORMAT_R32G32_SFLOAT, 8, nri::VertexInputRate::VERTEX_INPUT_RATE_VERTEX, "TEXCOORD0_"},
 		 }}};
 }

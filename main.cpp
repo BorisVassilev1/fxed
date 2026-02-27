@@ -16,7 +16,8 @@ struct PushConstants {
 	glm::ivec2			viewportSize;
 	glm::ivec2			translation = {0, 0};
 	nri::ResourceHandle textureHandle;
-	float				textSize = 12.0f;
+	float				textSize;
+	float				time;
 };
 
 struct PushConstantsCursor {
@@ -29,9 +30,9 @@ struct PushConstantsCursor {
 
 int main(int argc, char *argv[]) {
 	// 🚀 asd
-	// 🐊 
-	// 🐊 
-	// 🐊 
+	// 🐊
+	// 🐊
+	// 🐊
 	auto nri = nri::Factory::getInstance().createNRI("Vulkan", nri::CreateBits::GLFW);
 	//
 	// 🔔 asd
@@ -42,13 +43,13 @@ int main(int argc, char *argv[]) {
 	auto &win		= window.getNativeWindow();
 	win->clearColor = glm::vec4(30 / 255.f, 30 / 255.f, 46 / 255.f, 1.0f);
 
-	//std::string fontPath = fxed::Font::getDefaultSystemFontPath();
+	// std::string fontPath = fxed::Font::getDefaultSystemFontPath();
 	std::string fontPath = fxed::FontAtlas::findFontPath("FantasqueSansM Nerd Font:weight=regular");
 	dbLog(dbg::LOG_INFO, "Using font: %s", fontPath.c_str());
 
 	auto fallbackChain = fxed::FontFallbackChain({
-		fontPath, 
-		fxed::FontAtlas::findFontPath("Noto Color Emoji"), // fallback for emojis
+		fontPath,
+		fxed::FontAtlas::findFontPath("Noto Color Emoji"),	   // fallback for emojis
 	});
 
 	auto font = fxed::FontAtlas(*nri, window.getMainQueue(), std::move(fallbackChain), 512);
@@ -84,7 +85,7 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	//std::ranges::copy(text | fxed::to_utf8, std::ostream_iterator<char>(std::cout));
+	// std::ranges::copy(text | fxed::to_utf8, std::ostream_iterator<char>(std::cout));
 
 	auto				 textMesh = fxed::TextMesh(*nri, window.getMainQueue(), 10000);
 	TextEditor			 textEditor(text);
@@ -96,7 +97,8 @@ int main(int argc, char *argv[]) {
 		.viewportSize  = {window.getWidth(), window.getHeight()},
 		.translation   = {0, 0},
 		.textureHandle = textureHandle,
-		.textSize	   = 12.0f,
+		.textSize	   = 20.0f,
+		.time		   = 0.0f,
 	};
 
 	auto resizeCallback = [&](GLFWwindow *, int w, int h) { pushConstants.viewportSize = {w, h}; };
