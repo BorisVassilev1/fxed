@@ -14,7 +14,7 @@ class ResourceHandle {
 	bool IsValid() { return index != 0xFFFFFFFF; }
 };
 
-#define BINDLESS_RESCRIPTOR_HEAP_SIZE 100
+#define BINDLESS_RESCRIPTOR_HEAP_SIZE 16
 
 #define ITERATE_TEXTURE_TYPES(ITERATOR, ...) \
 	ITERATOR(int, __VA_ARGS__) \

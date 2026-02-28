@@ -173,5 +173,7 @@ int main(int argc, char *argv[]) {
 		window.swapBuffers();
 	}
 
+	nri->synchronize();
+
 	return 0;
 }

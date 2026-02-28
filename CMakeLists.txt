@@ -9,6 +9,7 @@ set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wpedantic -fno-omit-fram
 
 file(GLOB SOURCE_FILES src/*.cpp)
 
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
     message("Debug build")
     set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -g")
@@ -17,7 +18,6 @@ else()
     add_link_options(-static-libgcc -static-libstdc++)
 
     file(GLOB SHADER_FILES "${CMAKE_CURRENT_SOURCE_DIR}/shadercache/*.spv")
-    find_package(Python3 REQUIRED COMPONENTS Interpreter)
     add_custom_command(
      OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/shader_registry.cpp
      COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/gen_shader_registry.py
@@ -31,7 +31,6 @@ else()
   ${CMAKE_CURRENT_BINARY_DIR}/shader_registry.cpp
  )
 endif()
-
 
 
 if (UNIX)
@@ -48,6 +47,7 @@ set(FT_DISABLE_BROTLI ON)
 set(BUILD_SHARED_LIBS OFF)
 add_subdirectory(lib/glfw EXCLUDE_FROM_ALL)
 add_subdirectory(lib/glm EXCLUDE_FROM_ALL)
+add_subdirectory(lib/vk-bootstrap EXCLUDE_FROM_ALL)
 
 add_subdirectory(lib/freetype EXCLUDE_FROM_ALL)
 # Create the Freetype::Freetype alias that msdfgen expects
@@ -70,6 +70,7 @@ set(BUILD_SHARED_LIBS ON)
 
 add_executable(${PROJECT_NAME} ${SOURCE_FILES} main.cpp)
 target_link_libraries(${PROJECT_NAME} PRIVATE Vulkan::Vulkan)
+target_link_libraries(${PROJECT_NAME} PRIVATE vk-bootstrap::vk-bootstrap)
 
 if (UNIX)
     target_link_libraries(${PROJECT_NAME} PRIVATE fontconfig)
@@ -88,6 +89,21 @@ target_link_libraries(${PROJECT_NAME} PRIVATE glfw)
 target_link_libraries(${PROJECT_NAME} PRIVATE glm)
 target_link_libraries(${PROJECT_NAME} PRIVATE msdf-atlas-gen)
 target_link_libraries(${PROJECT_NAME} PRIVATE freetype)
+
+add_custom_command(
+	OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/vk_convert.hpp
+	COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/gen_vk_convert.py
+			> ${CMAKE_CURRENT_BINARY_DIR}/vk_convert.hpp
+	DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/gen_vk_convert.py
+	WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+	COMMENT "Generating Vulkan conversion utilities..."
+)
+message(${CMAKE_CURRENT_BINARY_DIR}/vk_convert.hpp)
+target_compile_definitions(${PROJECT_NAME} PRIVATE
+	"VK_CONVERT_HEADER=\"${CMAKE_CURRENT_BINARY_DIR}/vk_convert.hpp\""
+)
+add_custom_target(generate_vk_convert DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/vk_convert.hpp)
+add_dependencies(${PROJECT_NAME} generate_vk_convert)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ../

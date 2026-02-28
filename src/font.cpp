@@ -177,15 +177,15 @@ int FontAtlas::addGlyphToAtlas(uint32_t c) {
 		data->codepointToGlyphBoxIndex[c] = result;
 
 		if (face->glyph->format == FT_GLYPH_FORMAT_BITMAP) {
-			uint width	= face->glyph->bitmap.width;
-			uint height = face->glyph->bitmap.rows;
+			uint32_t width	= face->glyph->bitmap.width;
+			uint32_t height = face->glyph->bitmap.rows;
 
 			if (height > fontSize) {
 				// resize to fontSize x fontSize
-				double scale  = fontSize / (double)height;
-				double scale2 = 1.0 / (double)height;
-				uint   w	  = (uint)(width * scale);
-				uint   h	  = (uint)(height * scale);
+				double	 scale	= fontSize / (double)height;
+				double	 scale2 = 1.0 / (double)height;
+				uint32_t w		= (uint32_t)(width * scale);
+				uint32_t h		= (uint32_t)(height * scale);
 
 				auto rect = data->atlasPacker.pack({0, 0, (int)w, (int)h}, 1);
 				if (!rect) {
@@ -289,8 +289,8 @@ FontAtlas::~FontAtlas() { delete data; }
 
 void FontAtlas::resize(uint32_t newSize) {
 	auto oldSize = fontSize;
-	newSize = std::min(newSize, 32u);
-	if(oldSize == newSize) return;
+	newSize		 = std::min(newSize, 32u);
+	if (oldSize == newSize) return;
 
 	data->glyphBoxes.clear();
 	data->atlasPacker.setRowHeight(newSize + 2);
@@ -394,7 +394,7 @@ std::pair<fxed::GlyphBox, int> FontFallbackChain::getGlyphBox(uint32_t c, uint32
 		}
 
 		if (glyphIndex != 0) {
-			uint e = FT_Load_Glyph(face, glyphIndex, loadFlags);
+			uint32_t e = FT_Load_Glyph(face, glyphIndex, loadFlags);
 			if (e) {
 				dbLog(dbg::LOG_ERROR, "Failed to load glyph for codepoint ", c, " in font index ", i, " error: 0x",
 					  std::hex, e, std::dec);

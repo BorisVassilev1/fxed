@@ -24,8 +24,6 @@ class GraphicsProgram;
 class ComputeProgram;
 class RayTracingProgram;
 class ProgramBuilder;
-class BLAS;
-class TLAS;
 class Renderer;
 
 class ResourceHandle;
@@ -293,12 +291,6 @@ class NRI {
 	virtual std::unique_ptr<ProgramBuilder> createProgramBuilder()			= 0;
 	virtual std::unique_ptr<Window>			createGLFWWindow(GLFWwindow *w) = 0;
 
-	virtual std::unique_ptr<BLAS> createBLAS(Buffer &vertexBuffer, Format vertexFormat, std::size_t vertexOffset,
-											 uint32_t vertexCount, std::size_t vertexStride, Buffer &indexBuffer,
-											 IndexType indexType, std::size_t indexOffset)					  = 0;
-	virtual std::unique_ptr<TLAS> createTLAS(const std::span<const BLAS *>		  &blases,
-											 std::optional<std::span<glm::mat3x4>> transforms = std::nullopt) = 0;
-
 	virtual bool shouldFlipY() const		= 0;
 	virtual bool supportsRayTracing() const = 0;
 	virtual bool supportsTextures() const	= 0;
@@ -490,25 +482,6 @@ class ComputeProgram : virtual public Program {
 class RayTracingProgram : virtual public Program {
    public:
 	virtual void traceRays(CommandBuffer &commandBuffer, uint32_t width, uint32_t height, uint32_t depth) = 0;
-};
-
-// Bottom-Level Acceleration Structure (BLAS)
-class BLAS {
-   public:
-	virtual void build(CommandBuffer &commandBuffer) = 0;
-	virtual void buildFinished() {}
-
-	virtual ~BLAS() {}
-};
-
-class TLAS {
-   public:
-	virtual void build(CommandBuffer &commandBuffer) = 0;
-	virtual void buildFinished() {}
-
-	virtual ResourceHandle getHandle() const = 0;
-
-	virtual ~TLAS() {}
 };
 
 template <class ImageType, class ImageViewType>

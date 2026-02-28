@@ -5,9 +5,11 @@
 #include <format>
 
 #include <vulkan/vulkan.hpp>
-#include <vulkan/vulkan_raii.hpp>
-#include "vulkan/vulkan.hpp"
 #include <vulkan/vulkan_core.h>
+
+#include "vk_my_raii.hpp"
+#include "vulkan/vulkan.hpp"
+
 #ifdef _WIN32
 	#include <wrl.h>
 	#include <dxcapi.h>
@@ -25,17 +27,6 @@
 #include "nri.hpp"
 
 namespace nri {
-static const std::vector<const char *> validationLayers = {
-#ifndef NDEBUG
-//"VK_LAYER_KHRONOS_validation"
-#endif
-};
-
-#ifdef NDEBUG
-static const bool enableValidationLayers = false;
-#else
-static const bool enableValidationLayers = true;
-#endif
 
 static VkFormat nriFormat2vkFormat[] = {
 	VK_FORMAT_UNDEFINED,
@@ -171,25 +162,6 @@ static VkFormat nriFormat2vkFormat[] = {
 	VK_FORMAT_D32_SFLOAT_S8_UINT,
 };
 
-bool checkValidationLayerSupport() {
-	auto availableLayers = vk::enumerateInstanceLayerProperties();
-
-	for (const char *layerName : validationLayers) {
-		bool layerFound = false;
-
-		for (const auto &layerProperties : availableLayers) {
-			if (strcmp(layerName, layerProperties.layerName) == 0) {
-				layerFound = true;
-				break;
-			}
-		}
-
-		if (!layerFound) { return false; }
-	}
-
-	return true;
-}
-
 std::pair<const char *, bool> extensions[] = {
 	{"VK_KHR_surface", true},
 #ifdef __linux__
@@ -200,86 +172,20 @@ std::pair<const char *, bool> extensions[] = {
 	{"VK_EXT_debug_utils", false},
 };
 
-static std::vector<const char *> deviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-													 VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
-													 VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME};
+static std::vector<const char *> deviceExtensions = {
+	VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+	VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
+	VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME,
+};
 
-std::vector<const char *> checkExtensionSupport() {
-	auto					  availableExtensions = vk::enumerateInstanceExtensionProperties();
-	std::vector<const char *> availableExtensionNames;
+static void printDeviceQueueFamiliesInfo(const vkb::PhysicalDevice &device) {
+	uint32_t							   queueFamilyCount = 0;
+	std::vector<vk::QueueFamilyProperties> queueFamilies;
+	vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
+	queueFamilies.resize(queueFamilyCount);
+	vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount,
+											 (VkQueueFamilyProperties *)queueFamilies.data());
 
-	for (const auto &[extensionName, required] : extensions) {
-		bool extensionFound = false;
-
-		for (const auto &extensionProperties : availableExtensions) {
-			if (strcmp(extensionName, extensionProperties.extensionName) == 0) {
-				extensionFound = true;
-				break;
-			}
-		}
-
-		if (!extensionFound) {
-			if (required) throw std::runtime_error(std::format("Required extension not found! : {}", extensionName));
-			else dbLog(dbg::LOG_WARNING, "Optional extension not found: ", extensionName);
-		} else {
-			availableExtensionNames.push_back(extensionName);
-		}
-	}
-	return availableExtensionNames;
-}
-
-static VulkanNRI::QueueFamilyIndices findQueueFamilies(const vk::raii::PhysicalDevice &device) {
-	VulkanNRI::QueueFamilyIndices indices;
-
-	auto queueFamilies = device.getQueueFamilyProperties();
-	dbLog(dbg::LOG_DEBUG, "Found ", queueFamilies.size(), " queue families.");
-
-	int i = 0;
-	for (const auto &queueFamily : queueFamilies) {
-		// supports graphics, compute, and transfer
-		if (queueFamily.queueFlags &
-			vk::QueueFlagBits::eGraphics	 // &&
-											 // queueFamily.queueFlags & vk::QueueFlagBits::eCompute &&
-											 // queueFamily.queueFlags & vk::QueueFlagBits::eTransfer
-		) {
-			indices.graphicsFamily = i;
-			dbLog(dbg::LOG_INFO, "Queue family ", i, " supports graphics, compute, and transfer.");
-		}
-		i++;
-	}
-
-	if (indices.graphicsFamily.has_value()) {
-		dbLog(dbg::LOG_INFO, "Found graphics queue family index: ", indices.graphicsFamily.value());
-	} else {
-		dbLog(dbg::LOG_WARNING, "No suitable graphics queue family found.");
-	}
-
-	return indices;
-}
-
-static bool isDeviceSuitable(const vk::raii::PhysicalDevice &device) {
-	VulkanNRI::QueueFamilyIndices indices = findQueueFamilies(device);
-
-	bool extensionsSupported = true;
-	auto supportedExtensions = device.enumerateDeviceExtensionProperties();
-	for (const auto &requiredExt : deviceExtensions) {
-		auto it = std::find_if(
-			supportedExtensions.begin(), supportedExtensions.end(),
-			[&](const vk::ExtensionProperties &ext) { return strcmp(ext.extensionName, requiredExt) == 0; });
-		if (it == supportedExtensions.end()) {
-			dbLog(dbg::LOG_WARNING, "Required device extension not supported: ", requiredExt);
-			extensionsSupported = false;
-		}
-	}
-	if (!extensionsSupported) return false;
-
-	if (!indices.graphicsFamily.has_value()) return false;
-
-	return true;
-}
-
-static void printDeviceQueueFamiliesInfo(const vk::raii::PhysicalDevice &device) {
-	auto queueFamilies = device.getQueueFamilyProperties();
 	dbLog(dbg::LOG_DEBUG, "Device has ", queueFamilies.size(), " queue families:");
 	int i = 0;
 	for (const auto &queueFamily : queueFamilies) {
@@ -301,120 +207,83 @@ static void printDeviceQueueFamiliesInfo(const vk::raii::PhysicalDevice &device)
 }
 
 void VulkanNRI::createInstance() {
-	vk::ApplicationInfo appInfo("VulkanApp", 1, "NoEngine", 1, vk::ApiVersion12);
+	vkb::InstanceBuilder builder;
+	builder.set_app_name("VulkanNRI");
+#ifdef NDEBUG
+	builder.request_validation_layers(false);
+#else
+	builder.request_validation_layers(true);
+#endif
+	builder.set_engine_name("NoEngine");
+	builder.set_engine_version(1);
+	builder.require_api_version(1, 2);
+	builder.set_minimum_instance_version(1, 2);
 
-	vk::InstanceCreateInfo createInfo({}, &appInfo);
-
-	if (enableValidationLayers) {
-		if (checkValidationLayerSupport()) {
-			dbLog(dbg::LOG_INFO, "Validation layers are available and will be enabled.");
-			createInfo.enabledLayerCount   = static_cast<uint32_t>(validationLayers.size());
-			createInfo.ppEnabledLayerNames = validationLayers.data();
-		} else {
-			dbLog(dbg::LOG_WARNING, "Validation layers requested, but not available!");
-			createInfo.enabledLayerCount   = 0;
-			createInfo.ppEnabledLayerNames = nullptr;
-		}
-	} else {
-		createInfo.enabledLayerCount = 0;
+	for (const auto &[ext, required] : extensions) {
+		builder.enable_extension(ext);
 	}
 
-	auto availableExtensions = checkExtensionSupport();
-
-	createInfo.enabledExtensionCount   = availableExtensions.size();
-	createInfo.ppEnabledExtensionNames = availableExtensions.data();
-
-	instance = vk::raii::Instance(vk::raii::Context(), createInfo);
+	auto instRet = builder.build();
+	if (!instRet) {
+		throw std::runtime_error(std::format("Failed to create Vulkan instance: {}", instRet.error().message()));
+	}
+	instance  = std::move(instRet.value());
+	inst_disp = instance.make_table();
 }
 
 void VulkanNRI::pickPhysicalDevice() {
-	auto physicalDevices = instance.enumeratePhysicalDevices();
-	if (physicalDevices.size() == 0) { throw std::runtime_error("Failed to find GPUs with Vulkan support!"); }
+	vkb::PhysicalDeviceSelector selector{instance};
 
-	for (const auto &device : physicalDevices) {
-		dbLog(dbg::LOG_INFO, "Found device: ", device.getProperties().deviceName);
-		// printDeviceQueueFamiliesInfo(device);
-		if (isDeviceSuitable(device)) {
-			physicalDevice = device;
-			break;
+	selector.set_minimum_version(1, 2);
+	selector.require_present(true);
+	selector.defer_surface_initialization();
+	selector.allow_any_gpu_device_type(true);
+
+	auto physDevRet = selector.select();
+	if (!physDevRet) {
+		if (physDevRet.error() == vkb::PhysicalDeviceError::no_suitable_device) {
+			const auto &detailed_reasons = physDevRet.detailed_failure_reasons();
+			if (!detailed_reasons.empty()) {
+				std::cerr << "GPU Selection failure reasons:\n";
+				for (const std::string &reason : detailed_reasons) {
+					std::cerr << reason << "\n";
+				}
+			}
 		}
+		THROW_RUNTIME_ERR(std::format("Failed to select physical device: {}", physDevRet.error().message()));
 	}
 
-	queueFamilyIndices = findQueueFamilies(physicalDevice);
-	if (physicalDevice == nullptr) { throw std::runtime_error("Failed to find a suitable GPU!"); }
+	bool res	   = false;
+	physicalDevice = std::move(physDevRet.value());
+	for (const auto &ext : deviceExtensions) {
+		res = physicalDevice.enable_extension_if_present(ext);
+		if (!res) { THROW_RUNTIME_ERR(std::format("Required device extension {} is not supported", ext)); }
+	}
+	res = physicalDevice.enable_extension_features_if_present(vk::PhysicalDeviceVulkan12Features()
+																  .setBufferDeviceAddress(true)
+																  .setShaderSampledImageArrayNonUniformIndexing(true)
+																  .setShaderStorageBufferArrayNonUniformIndexing(true)
+																  .setShaderStorageImageArrayNonUniformIndexing(true));
+	if (!res) { THROW_RUNTIME_ERR("Failed to enable required Vulkan 1.2 features"); }
+	res = physicalDevice.enable_extension_features_if_present(
+		vk::PhysicalDeviceDynamicRenderingFeatures().setDynamicRendering(true));
+	if (!res) { THROW_RUNTIME_ERR("Failed to enable required dynamic rendering features"); }
+	dbLog(dbg::LOG_INFO, "Selected physical device: ", physicalDevice.name);
 }
 
 void VulkanNRI::createLogicalDevice() {
-	QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
+	vkb::DeviceBuilder builder{physicalDevice};
 
-	float					  prio = 1.0f;
-	vk::DeviceQueueCreateInfo queueCreateInfo({}, indices.graphicsFamily.value(), 1, &prio);
-
-	// check device features support
-	vk::PhysicalDeviceFeatures2				   physicalDeviceFeatures2{};
-	vk::PhysicalDeviceVulkan12Features		   vulkan12Features{};
-	vk::PhysicalDeviceDynamicRenderingFeatures dynamicRenderingFeatures{};
-	physicalDeviceFeatures2.pNext = &vulkan12Features;
-	vulkan12Features.pNext		  = &dynamicRenderingFeatures;
-
-	vkGetPhysicalDeviceFeatures2(*physicalDevice, &*physicalDeviceFeatures2);
-
-	if (!vulkan12Features.bufferDeviceAddress) {
-		dbLog(dbg::LOG_ERROR,
-			  "Device does not support buffer device address feature, which is required by this application.");
+	auto deviceRet = builder.build();
+	if (!deviceRet) {
+		THROW_RUNTIME_ERR(std::format("Failed to create logical device: {}", deviceRet.error().message()));
 	}
-	if (!vulkan12Features.descriptorBindingUniformBufferUpdateAfterBind ||
-		!vulkan12Features.descriptorBindingStorageBufferUpdateAfterBind ||
-		!vulkan12Features.descriptorBindingSampledImageUpdateAfterBind ||
-		!vulkan12Features.descriptorBindingStorageImageUpdateAfterBind) {
-		dbLog(dbg::LOG_ERROR,
-			  "Device does not support required update after bind features, which are required by this application.");
-	}
-	if (!vulkan12Features.shaderSampledImageArrayNonUniformIndexing ||
-		!vulkan12Features.shaderStorageBufferArrayNonUniformIndexing ||
-		!vulkan12Features.shaderStorageImageArrayNonUniformIndexing) {
-		dbLog(
-			dbg::LOG_ERROR,
-			"Device does not support required non-uniform indexing features, which are required by this application.");
-	}
-	if (!dynamicRenderingFeatures.dynamicRendering) {
-		dbLog(dbg::LOG_ERROR,
-			  "Device does not support dynamic rendering feature, which is required by this application.");
-	}
+	device	 = std::move(deviceRet.value());
+	auto gqi = device.get_queue_index(vkb::QueueType::graphics);
+	if (!gqi.has_value()) { THROW_RUNTIME_ERR("Failed to get graphics queue index"); }
+	queueFamilyIndices.graphicsFamily = gqi.value();
 
-	vk::PhysicalDeviceFeatures					 deviceFeatures{};
-	vk::PhysicalDeviceDescriptorIndexingFeatures descriptorIndexingFeatures(
-		VK_FALSE,	  // shaderInputAttachmentArrayDynamicIndexing
-		VK_FALSE,	  // shaderUniformTexelBufferArrayDynamicIndexing
-		VK_FALSE,	  // shaderStorageTexelBufferArrayDynamicIndexing
-		VK_TRUE,	  // shaderUniformBufferArrayNonUniformIndexing
-		VK_TRUE,	  // shaderStorageBufferArrayNonUniformIndexing
-		VK_TRUE,	  // shaderSampledImageArrayNonUniformIndexing
-		VK_TRUE,	  // shaderStorageImageArrayNonUniformIndexing
-		VK_FALSE,	  // shaderInputAttachmentArrayNonUniformIndexing
-		VK_FALSE,	  // shaderUniformTexelBufferArrayNonUniformIndexing
-		VK_FALSE,	  // shaderStorageTexelBufferArrayNonUniformIndexing
-		VK_TRUE,	  // descriptorBindingUniformBufferUpdateAfterBind
-		VK_TRUE,	  // descriptorBindingStorageBufferUpdateAfterBind
-		VK_TRUE,	  // descriptorBindingSampledImageUpdateAfterBind
-		VK_TRUE,	  // descriptorBindingStorageImageUpdateAfterBind
-		VK_FALSE,	  // descriptorBindingStorageTexelBufferUpdateAfterBind
-		VK_FALSE,	  // descriptorBindingUniformTexelBufferUpdateAfterBind
-		VK_FALSE,	  // descriptorBindingUpdateUnusedWhilePending
-		VK_FALSE,	  // descriptorBindingPartiallyBound
-		VK_FALSE,	  // descriptorBindingVariableDescriptorCount
-		VK_FALSE,	  // runtimeDescriptorArray
-		nullptr);
-	vk::PhysicalDeviceDynamicRenderingFeatures	  dynamicRenderingFeature(VK_TRUE, &descriptorIndexingFeatures);
-	vk::PhysicalDeviceBufferDeviceAddressFeatures bufferDeviceAddressFeature(VK_TRUE, VK_FALSE, VK_FALSE,
-																			 &dynamicRenderingFeature);
-
-	vk::DeviceCreateInfo createInfo(
-		{}, 1, &queueCreateInfo, enableValidationLayers ? static_cast<uint32_t>(validationLayers.size()) : 0,
-		enableValidationLayers ? validationLayers.data() : nullptr, static_cast<uint32_t>(deviceExtensions.size()),
-		deviceExtensions.data(), &deviceFeatures, &bufferDeviceAddressFeature);
-
-	device = vk::raii::Device(physicalDevice, createInfo);
+	disp = device.make_table();
 }
 }	  // namespace nri
 #define GLFW_INCLUDE_NONE
@@ -438,9 +307,9 @@ static void prepareGLFW() {
 
 VulkanNRI::VulkanNRI(CreateBits createBits)
 	: NRI(createBits),
-	  instance(nullptr),
-	  physicalDevice(nullptr),
-	  device(nullptr),
+	  instance(),
+	  physicalDevice(),
+	  device(),
 	  defaultCommandPool(nullptr),
 	  descriptorAllocator(std::nullopt) {
 	if (createBits & CreateBits::GLFW) { prepareGLFW(); }
@@ -453,44 +322,59 @@ VulkanNRI::VulkanNRI(CreateBits createBits)
 	defaultCommandPool = std::move(static_cast<VulkanCommandPool &>(*dcp));
 	descriptorAllocator.emplace(*this);
 
-	dbLog(dbg::LOG_INFO, "VulkanNRI initialized with device: ", physicalDevice.getProperties().deviceName);
+	vk::PhysicalDeviceProperties physicalDeviceProperties;
+	vkGetPhysicalDeviceProperties(physicalDevice, &*physicalDeviceProperties);
+	dbLog(dbg::LOG_INFO, "VulkanNRI initialized with device: ", physicalDeviceProperties.deviceName);
 }
 
 VulkanNRI::~VulkanNRI() {
-	device.waitIdle();
+	vkDeviceWaitIdle(device);
 	// VulkanMemoryCache::destroy();
 }
 VulkanDescriptorAllocator::VulkanDescriptorAllocator(VulkanNRI &nri)
 	: nri(nri), pool(nullptr), descriptorSetLayout(nullptr), bigDescriptorSet(nullptr) {
+	// query the maximum number of descriptors we can allocate for each type
+	vk::PhysicalDeviceProperties properties;
+	vkGetPhysicalDeviceProperties(&*nri.getPhysicalDevice(), &*properties);
+	auto &limits = properties.limits;
+
+	limits.maxPerStageDescriptorUniformBuffers = std::min(limits.maxPerStageDescriptorUniformBuffers, 500u);
+	limits.maxPerStageDescriptorStorageBuffers = std::min(limits.maxPerStageDescriptorStorageBuffers, 500u);
+	limits.maxPerStageDescriptorSampledImages  = std::min(limits.maxPerStageDescriptorSampledImages, 500u);
+	limits.maxPerStageDescriptorStorageImages  = std::min(limits.maxPerStageDescriptorStorageImages, 500u);
+
 	std::array<vk::DescriptorPoolSize, 4> poolSizes = {
-		vk::DescriptorPoolSize(vk::DescriptorType::eCombinedImageSampler, 500),
-		vk::DescriptorPoolSize(vk::DescriptorType::eStorageImage, 500),
-		vk::DescriptorPoolSize(vk::DescriptorType::eUniformBuffer, 500),
-		vk::DescriptorPoolSize(vk::DescriptorType::eStorageBuffer, 500),
+		vk::DescriptorPoolSize(vk::DescriptorType::eCombinedImageSampler, limits.maxPerStageDescriptorSampledImages),
+		vk::DescriptorPoolSize(vk::DescriptorType::eStorageImage, limits.maxPerStageDescriptorStorageImages),
+		vk::DescriptorPoolSize(vk::DescriptorType::eUniformBuffer, limits.maxPerStageDescriptorUniformBuffers),
+		vk::DescriptorPoolSize(vk::DescriptorType::eStorageBuffer, limits.maxPerStageDescriptorStorageBuffers),
 	};
 
-	vk::DescriptorPoolCreateInfo poolInfo(
-		vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet | vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind, 1000,
-		poolSizes.size(), poolSizes.data());
+	uint32_t totalDescriptors = 0;
+	for (const auto &poolSize : poolSizes) {
+		totalDescriptors += poolSize.descriptorCount;
+	}
+	vk::DescriptorPoolCreateInfo poolInfo(vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet, totalDescriptors,
+										  poolSizes.size(), poolSizes.data());
 
-	pool = vk::raii::DescriptorPool(nri.getDevice(), poolInfo);
+	vk::DescriptorPool descriptorPool;
+	vkCreateDescriptorPool(&*nri.getDevice(), &*poolInfo, nullptr, vkc(&descriptorPool)());
+	pool = vkraii::DescriptorPool(nri.getDevice().device, descriptorPool);
 
 	std::array<vk::DescriptorSetLayoutBinding, 4> samplerBindings = {
-		vk::DescriptorSetLayoutBinding(0, vk::DescriptorType::eCombinedImageSampler, 500, vk::ShaderStageFlagBits::eAll,
-									   nullptr),
-		vk::DescriptorSetLayoutBinding(1, vk::DescriptorType::eStorageImage, 500, vk::ShaderStageFlagBits::eAll,
-									   nullptr),
-		vk::DescriptorSetLayoutBinding(2, vk::DescriptorType::eUniformBuffer, 500, vk::ShaderStageFlagBits::eAll,
-									   nullptr),
-		vk::DescriptorSetLayoutBinding(3, vk::DescriptorType::eStorageBuffer, 500, vk::ShaderStageFlagBits::eAll,
-									   nullptr),
+		vk::DescriptorSetLayoutBinding(0, vk::DescriptorType::eCombinedImageSampler, poolSizes[0].descriptorCount,
+									   vk::ShaderStageFlagBits::eAll, nullptr),
+		vk::DescriptorSetLayoutBinding(1, vk::DescriptorType::eStorageImage, poolSizes[1].descriptorCount,
+									   vk::ShaderStageFlagBits::eAll, nullptr),
+		vk::DescriptorSetLayoutBinding(2, vk::DescriptorType::eUniformBuffer, poolSizes[2].descriptorCount,
+									   vk::ShaderStageFlagBits::eAll, nullptr),
+		vk::DescriptorSetLayoutBinding(3, vk::DescriptorType::eStorageBuffer, poolSizes[3].descriptorCount,
+									   vk::ShaderStageFlagBits::eAll, nullptr),
 	};
 
-	vk::DescriptorSetLayoutCreateInfo layoutInfo(vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool |
-													 vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPoolEXT,
-												 samplerBindings.size(), samplerBindings.data());
+	vk::DescriptorSetLayoutCreateInfo layoutInfo({}, samplerBindings.size(), samplerBindings.data());
 
-	const vk::DescriptorBindingFlags bindingFlags = vk::DescriptorBindingFlagBits::eUpdateAfterBind;
+	const vk::DescriptorBindingFlags bindingFlags = {};
 
 	const vk::DescriptorBindingFlags bindingFlagsArr[] = {bindingFlags, bindingFlags, bindingFlags, bindingFlags,
 														  bindingFlags};
@@ -498,10 +382,14 @@ VulkanDescriptorAllocator::VulkanDescriptorAllocator(VulkanNRI &nri)
 	vk::DescriptorSetLayoutBindingFlagsCreateInfo bindingFlagsInfo(samplerBindings.size(), bindingFlagsArr);
 	layoutInfo.pNext = &bindingFlagsInfo;
 
-	descriptorSetLayout = vk::raii::DescriptorSetLayout(nri.getDevice(), layoutInfo);
-	vk::DescriptorSetAllocateInfo allocInfo(pool, 1, &*descriptorSetLayout);
-	auto						  descriptorSets = nri.getDevice().allocateDescriptorSets(allocInfo);
-	bigDescriptorSet							 = std::move(descriptorSets[0]);
+	vk::DescriptorSetLayout descriptorSetLayout;
+	vkCreateDescriptorSetLayout(&*nri.getDevice(), &*layoutInfo, nullptr, vkc(&descriptorSetLayout)());
+	this->descriptorSetLayout = vkraii::DescriptorSetLayout(nri.getDevice().device, descriptorSetLayout);
+
+	vk::DescriptorSetAllocateInfo allocInfo(pool, 1, &descriptorSetLayout);
+	vk::DescriptorSet			  descriptorSet;
+	vkAllocateDescriptorSets(&*nri.getDevice(), &*allocInfo, vkc(&descriptorSet)());
+	bigDescriptorSet = vkraii::DescriptorSet(nri.getDevice().device, pool, descriptorSet);
 }
 
 ResourceHandle VulkanDescriptorAllocator::addUniformBufferDescriptor(const VulkanBuffer &buffer) {
@@ -512,7 +400,8 @@ ResourceHandle VulkanDescriptorAllocator::addUniformBufferDescriptor(const Vulka
 	vk::WriteDescriptorSet descriptorWrite(bigDescriptorSet, 2, descriptorIndex, 1, vk::DescriptorType::eUniformBuffer,
 										   nullptr, &bufferInfo, nullptr);
 
-	(*nri.getDevice()).updateDescriptorSets(1, &descriptorWrite, 0, nullptr);
+	vkUpdateDescriptorSets(&*nri.getDevice(), 1, (VkWriteDescriptorSet *)&descriptorWrite, 0, nullptr);
+	dbLog(dbg::LOG_INFO, "Added uniform buffer descriptor at index ", descriptorIndex);
 
 	return ResourceHandle(ResourceType::RESOURCE_TYPE_BUFFER, false, descriptorIndex);
 }
@@ -526,7 +415,8 @@ ResourceHandle VulkanDescriptorAllocator::addStorageBufferDescriptor(const Vulka
 	vk::WriteDescriptorSet descriptorWrite(bigDescriptorSet, 3, descriptorIndex, 1, vk::DescriptorType::eStorageBuffer,
 										   nullptr, &bufferInfo, nullptr);
 
-	(*nri.getDevice()).updateDescriptorSets(1, &descriptorWrite, 0, nullptr);
+	vkUpdateDescriptorSets(&*nri.getDevice(), 1, (VkWriteDescriptorSet *)&descriptorWrite, 0, nullptr);
+	dbLog(dbg::LOG_INFO, "Added storage buffer descriptor at index ", descriptorIndex);
 
 	return ResourceHandle(ResourceType::RESOURCE_TYPE_BUFFER, true, descriptorIndex);
 }
@@ -539,20 +429,10 @@ ResourceHandle VulkanDescriptorAllocator::addSamplerImageDescriptor(const Vulkan
 	vk::WriteDescriptorSet descriptorWrite(bigDescriptorSet, 0, descriptorIndex, 1,
 										   vk::DescriptorType::eCombinedImageSampler, &imageInfo, nullptr, nullptr);
 
-	(*nri.getDevice()).updateDescriptorSets(1, &descriptorWrite, 0, nullptr);
+	vkUpdateDescriptorSets(&*nri.getDevice(), 1, (VkWriteDescriptorSet *)&descriptorWrite, 0, nullptr);
+	dbLog(dbg::LOG_INFO, "Added sampler image descriptor at index ", descriptorIndex);
 
 	return ResourceHandle(ResourceType::RESOURCE_TYPE_IMAGE_SAMPLER, false, descriptorIndex);
-}
-ResourceHandle VulkanDescriptorAllocator::addAccelerationStructureDescriptor(const VulkanTLAS &tlas) {
-	uint32_t descriptorIndex = currentASDescriptorIndex++;
-
-	vk::WriteDescriptorSetAccelerationStructureKHR descriptorASInfo(1, &*const_cast<VulkanTLAS &>(tlas).getTLAS());
-	vk::WriteDescriptorSet						   descriptorWrite(bigDescriptorSet, 4, descriptorIndex, 1,
-																   vk::DescriptorType::eAccelerationStructureKHR, nullptr, nullptr, nullptr,
-																   &descriptorASInfo);
-	(*nri.getDevice()).updateDescriptorSets(1, &descriptorWrite, 0, nullptr);
-
-	return ResourceHandle(ResourceType::RESOURCE_TYPE_TLAS, false, descriptorIndex);
 }
 
 ResourceHandle VulkanDescriptorAllocator::addStorageImageDescriptor(const VulkanStorageImage2D &image) {
@@ -563,7 +443,8 @@ ResourceHandle VulkanDescriptorAllocator::addStorageImageDescriptor(const Vulkan
 	vk::WriteDescriptorSet descriptorWrite(bigDescriptorSet, 1, descriptorIndex, 1, vk::DescriptorType::eStorageImage,
 										   &imageInfo, nullptr, nullptr);
 
-	(*nri.getDevice()).updateDescriptorSets(1, &descriptorWrite, 0, nullptr);
+	vkUpdateDescriptorSets(&*nri.getDevice(), 1, (VkWriteDescriptorSet *)&descriptorWrite, 0, nullptr);
+	dbLog(dbg::LOG_INFO, "Added storage image descriptor at index ", descriptorIndex);
 
 	return ResourceHandle(ResourceType::RESOURCE_TYPE_STORAGE_IMAGE, true, descriptorIndex);
 }
@@ -579,8 +460,10 @@ VulkanAllocation::VulkanAllocation(VulkanNRI &nri, MemoryRequirements memoryRequ
 	assert(memoryRequirements.typeRequest < MemoryTypeRequest::_MEMORY_TYPE_NUM);
 	vk::MemoryPropertyFlags properties = typeRequest2vkMemoryProperty[(uint32_t)memoryRequirements.typeRequest];
 
-	vk::PhysicalDeviceMemoryProperties memProperties   = nri.getPhysicalDevice().getMemoryProperties();
-	uint32_t						   memoryTypeIndex = -1;
+	vk::PhysicalDeviceMemoryProperties memProperties;
+	vkGetPhysicalDeviceMemoryProperties(nri.getPhysicalDevice(), &*memProperties);
+
+	uint32_t memoryTypeIndex = -1;
 	for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
 		if ((memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
 			memoryTypeIndex = i;
@@ -593,13 +476,15 @@ VulkanAllocation::VulkanAllocation(VulkanNRI &nri, MemoryRequirements memoryRequ
 	vk::MemoryAllocateFlagsInfo allocFlagsInfo(vk::MemoryAllocateFlagBits::eDeviceAddress, {});
 	vk::MemoryAllocateInfo		allocInfo(memoryRequirements.size, memoryTypeIndex, &allocFlagsInfo);
 
-	memory = vk::raii::DeviceMemory(nri.getDevice(), allocInfo);
+	vk::DeviceMemory allocatedMemory;
+	vkAllocateMemory(nri.getDevice(), &*allocInfo, nullptr, vkc(&allocatedMemory)());
+	memory = vkraii::DeviceMemory(nri.getDevice().device, allocatedMemory);
 }
 
 void *VulkanAllocation::map() {
 	assert(memory != nullptr);
 	void *data = nullptr;
-	data	   = memory.mapMemory(0, size);
+	vkMapMemory(device, memory, 0, size, 0, &data);
 	if (data == nullptr) {
 		dbLog(dbg::LOG_ERROR, "Failed to map memory!");
 		throw std::runtime_error("Failed to map memory!");
@@ -609,7 +494,7 @@ void *VulkanAllocation::map() {
 
 void VulkanAllocation::unmap() {
 	assert(memory != nullptr);
-	memory.unmapMemory();
+	vkUnmapMemory(device, memory);
 }
 
 ResourceHandle VulkanBuffer::createHandle() const {
@@ -637,11 +522,14 @@ VulkanBuffer::VulkanBuffer(VulkanNRI &nri, std::size_t size, BufferUsage usage)
 
 	vk::BufferCreateInfo bufferInfo({}, size, bufferUsageFlags, vk::SharingMode::eExclusive);
 
-	this->buffer = vk::raii::Buffer(nri.getDevice(), bufferInfo);
+	vk::Buffer createdBuffer;
+	vkCreateBuffer(nri.getDevice(), &*bufferInfo, nullptr, vkc(&createdBuffer)());
+	buffer = vkraii::Buffer(nri.getDevice().device, createdBuffer);
 }
 
 MemoryRequirements VulkanBuffer::getMemoryRequirements() {
-	vk::MemoryRequirements memRequirements = buffer.getMemoryRequirements();
+	vk::MemoryRequirements memRequirements;
+	vkGetBufferMemoryRequirements(nri->getDevice(), buffer, &*memRequirements);
 
 	return MemoryRequirements(memRequirements.size, MemoryTypeRequest::MEMORY_TYPE_DEVICE, memRequirements.alignment);
 }
@@ -650,7 +538,7 @@ void VulkanBuffer::bindMemory(Allocation &allocation, std::size_t offset) {
 	VulkanAllocation &vulkanAllocation = static_cast<VulkanAllocation &>(allocation);
 	this->offset					   = offset;
 
-	buffer.bindMemory(vulkanAllocation.getMemory(), offset);
+	vkBindBufferMemory(nri->getDevice(), buffer, vulkanAllocation.getMemory(), offset);
 	this->allocation = &vulkanAllocation;
 }
 void *VulkanBuffer::map(std::size_t offset, std::size_t size) {
@@ -689,13 +577,15 @@ void VulkanBuffer::copyFrom(CommandBuffer &commandBuffer, Buffer &srcBuffer, std
 	// vkCmdBuf.commandBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eHost,
 	//									   vk::PipelineStageFlagBits::eTransfer, {}, {}, {bufferBarrier}, {});
 
-	vkCmdBuf.commandBuffer.copyBuffer(vkSrcBuf.buffer, this->buffer, vk::BufferCopy(srcOffset, dstOffset, size));
+	vk::BufferCopy copyRegion(srcOffset, dstOffset, size);
+	vkCmdCopyBuffer(vkCmdBuf.commandBuffer, vkSrcBuf.buffer, this->buffer, 1, vkc(&copyRegion)());
 
 	vk::BufferMemoryBarrier bufferBarrier2(vk::AccessFlagBits::eTransferWrite, vk::AccessFlagBits::eMemoryRead,
 										   VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, this->buffer, dstOffset,
 										   size);
-	vkCmdBuf.commandBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eTopOfPipe,
-										   {}, {}, {bufferBarrier2}, {});
+
+	vkCmdPipelineBarrier(vkCmdBuf.commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, {},
+						 0, nullptr, 1, vkc(&bufferBarrier2)(), 0, nullptr);
 }
 
 void VulkanBuffer::bindAsVertexBuffer(CommandBuffer &commandBuffer, uint32_t binding, std::size_t offset,
@@ -703,9 +593,8 @@ void VulkanBuffer::bindAsVertexBuffer(CommandBuffer &commandBuffer, uint32_t bin
 	auto &vkCmdBuf = static_cast<VulkanCommandBuffer &>(commandBuffer);
 	static_cast<void>(stride);
 
-	vk::Buffer vkBuffer = this->buffer;
-
-	vkCmdBuf.commandBuffer.bindVertexBuffers(binding, vkBuffer, vk::DeviceSize(offset));
+	// vkCmdBuf.commandBuffer.bindVertexBuffers(binding, vkBuffer, vk::DeviceSize(offset));
+	vkCmdBindVertexBuffers(vkCmdBuf.commandBuffer, binding, 1, vkc(&*buffer)(), &offset);
 }
 
 vk::IndexType nriIndexType2vkIndexType[] = {
@@ -718,16 +607,16 @@ void VulkanBuffer::bindAsIndexBuffer(CommandBuffer &commandBuffer, std::size_t o
 	vk::Buffer	  vkBuffer	  = this->buffer;
 	vk::IndexType vkIndexType = nriIndexType2vkIndexType[static_cast<int>(indexType)];
 	assert(int(vkIndexType) != -1);
-	vkCmdBuf.commandBuffer.bindIndexBuffer(vkBuffer, vk::DeviceSize(offset), vkIndexType);
+	vkCmdBindIndexBuffer(vkCmdBuf.commandBuffer, vkBuffer, offset, (VkIndexType)vkIndexType);
 }
 
 vk::DeviceAddress VulkanBuffer::getAddress() {
 	vk::BufferDeviceAddressInfo addressInfo;
 	addressInfo.setBuffer(buffer);
-	return nri->getDevice().getBufferAddress(addressInfo);
+	return vkGetBufferDeviceAddress(nri->getDevice(), &*addressInfo);
 }
 
-VulkanImageView::VulkanImageView(VulkanNRI &nri, vk::raii::ImageView &&imgView, vk::Format fmt)
+VulkanImageView::VulkanImageView(VulkanNRI &nri, vkraii::ImageView &&imgView, vk::Format fmt)
 	: ImageView(), nri(&nri), imageView(std::move(imgView)), format(fmt) {}
 
 VulkanRenderTarget::VulkanRenderTarget(VulkanNRI &nri, VulkanImage2D &image2D)
@@ -737,7 +626,9 @@ VulkanRenderTarget::VulkanRenderTarget(VulkanNRI &nri, VulkanImage2D &image2D)
 		vk::ComponentMapping(vk::ComponentSwizzle::eIdentity, vk::ComponentSwizzle::eIdentity,
 							 vk::ComponentSwizzle::eIdentity, vk::ComponentSwizzle::eIdentity),
 		vk::ImageSubresourceRange(image2D.getAspectFlags(), 0, 1, 0, 1));
-	imageView = vk::raii::ImageView(nri.getDevice(), imageViewInfo);
+	vk::ImageView createdImageView;
+	vkCreateImageView(nri.getDevice(), &*imageViewInfo, nullptr, vkc(&createdImageView)());
+	imageView = vkraii::ImageView(nri.getDevice().device, createdImageView);
 }
 
 ResourceHandle VulkanRenderTarget::createHandle() const {
@@ -752,14 +643,18 @@ VulkanTexture2D::VulkanTexture2D(VulkanNRI &nri, VulkanImage2D &image2D)
 		vk::ComponentMapping(vk::ComponentSwizzle::eIdentity, vk::ComponentSwizzle::eIdentity,
 							 vk::ComponentSwizzle::eIdentity, vk::ComponentSwizzle::eIdentity),
 		vk::ImageSubresourceRange(image2D.getAspectFlags(), 0, 1, 0, 1));
-	imageView = vk::raii::ImageView(nri.getDevice(), imageViewInfo);
+	vk::ImageView createdImageView;
+	vkCreateImageView(nri.getDevice(), &*imageViewInfo, nullptr, vkc(&createdImageView)());
+	imageView = vkraii::ImageView(nri.getDevice().device, createdImageView);
 
 	vk::SamplerCreateInfo samplerInfo({}, vk::Filter::eNearest, vk::Filter::eNearest, vk::SamplerMipmapMode::eNearest,
 									  vk::SamplerAddressMode::eClampToEdge, vk::SamplerAddressMode::eClampToEdge,
 									  vk::SamplerAddressMode::eClampToEdge, 0.0f, VK_FALSE, 1.0f, VK_FALSE,
 									  vk::CompareOp::eAlways, 0.0f, 0.0f, vk::BorderColor::eFloatTransparentBlack,
 									  VK_FALSE);
-	sampler = vk::raii::Sampler(nri.getDevice(), samplerInfo);
+	vk::Sampler			  createdSampler;
+	vkCreateSampler(nri.getDevice(), &*samplerInfo, nullptr, vkc(&createdSampler)());
+	sampler = vkraii::Sampler(nri.getDevice().device, createdSampler);
 }
 
 ResourceHandle VulkanTexture2D::createHandle() const {
@@ -773,7 +668,9 @@ VulkanStorageImage2D::VulkanStorageImage2D(VulkanNRI &nri, VulkanImage2D &image2
 		vk::ComponentMapping(vk::ComponentSwizzle::eIdentity, vk::ComponentSwizzle::eIdentity,
 							 vk::ComponentSwizzle::eIdentity, vk::ComponentSwizzle::eIdentity),
 		vk::ImageSubresourceRange(image2D.getAspectFlags(), 0, 1, 0, 1));
-	imageView = vk::raii::ImageView(nri.getDevice(), imageViewInfo);
+	vk::ImageView createdImageView;
+	vkCreateImageView(nri.getDevice(), &*imageViewInfo, nullptr, vkc(&createdImageView)());
+	imageView = vkraii::ImageView(nri.getDevice().device, createdImageView);
 }
 
 ResourceHandle VulkanStorageImage2D::createHandle() const {
@@ -800,7 +697,7 @@ std::unique_ptr<Buffer> VulkanNRI::createBuffer(std::size_t size, BufferUsage us
 
 MemoryRequirements VulkanImage2D::getMemoryRequirements() {
 	VkMemoryRequirements memRequirements;
-	vkGetImageMemoryRequirements(**device, image.get(), &memRequirements);
+	vkGetImageMemoryRequirements(*device, image.get(), &memRequirements);
 
 	return MemoryRequirements(memRequirements.size, MemoryTypeRequest::MEMORY_TYPE_DEVICE, memRequirements.alignment);
 }
@@ -808,7 +705,7 @@ MemoryRequirements VulkanImage2D::getMemoryRequirements() {
 void VulkanImage2D::bindMemory(Allocation &allocation, std::size_t offset) {
 	VulkanAllocation &vulkanAllocation = static_cast<VulkanAllocation &>(allocation);
 
-	vkBindImageMemory(**device, image.get(), vulkanAllocation.getMemory(), offset);
+	vkBindImageMemory(*device, image.get(), vulkanAllocation.getMemory(), offset);
 }
 
 void VulkanImage2D::clear(CommandBuffer &commandBuffer, glm::vec4 color) {
@@ -821,8 +718,12 @@ void VulkanImage2D::clear(CommandBuffer &commandBuffer, glm::vec4 color) {
 					 vk::AccessFlagBits::eTransferWrite, vk::PipelineStageFlagBits::eTopOfPipe,
 					 vk::PipelineStageFlagBits::eTransfer);
 
-	vkBuf.commandBuffer.clearColorImage(image.get(), vk::ImageLayout::eTransferDstOptimal, v,
-										{vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1)});
+	// vkBuf.commandBuffer.clearColorImage(image.get(), vk::ImageLayout::eTransferDstOptimal, v,
+	//									{vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1)});
+
+	vk::ImageSubresourceRange range(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1);
+	vkCmdClearColorImage(vkBuf.commandBuffer, image.get(), (VkImageLayout)vk::ImageLayout::eTransferDstOptimal,
+						 (VkClearColorValue *)&v, 1, vkc(&range)());
 }
 
 void VulkanImage2D::prepareForPresent(CommandBuffer &commandBuffer) {
@@ -866,8 +767,8 @@ void VulkanImage2D::copyFrom(CommandBuffer &commandBuffer, Buffer &srcBuffer, st
 					 vk::PipelineStageFlagBits::eTransfer);
 	vk::BufferImageCopy region(srcOffset, srcRowPitch, 0, vk::ImageSubresourceLayers(aspectFlags, 0, 0, 1),
 							   vk::Offset3D(0, 0, 0), vk::Extent3D(width, height, 1));
-	vkCmdBuf.commandBuffer.copyBufferToImage(vkSrcBuf.getBuffer(), image.get(), vk::ImageLayout::eTransferDstOptimal,
-											 region);
+	vkCmdCopyBufferToImage(vkCmdBuf.commandBuffer, vkSrcBuf.getBuffer(), image.get(),
+						   (VkImageLayout)vk::ImageLayout::eTransferDstOptimal, 1, vkc(&region)());
 }
 
 vk::ImageAspectFlags VulkanImage2D::getAspectFlags(vk::Format format) {
@@ -891,7 +792,8 @@ void VulkanImage2D::transitionLayout(CommandBuffer &commandBuffer, vk::ImageLayo
 	vk::ImageMemoryBarrier barrier(srcAccess, dstAccess, layout, newLayout, vk::QueueFamilyIgnored,
 								   vk::QueueFamilyIgnored, image.get(), {aspectFlags, 0, 1, 0, 1});
 	vkBuf.begin();
-	vkBuf.commandBuffer.pipelineBarrier(srcStage, dstStage, vk::DependencyFlagBits::eByRegion, {}, {}, {barrier});
+	vkCmdPipelineBarrier(vkBuf.commandBuffer, (VkPipelineStageFlags)srcStage, (VkPipelineStageFlags)dstStage, 0, 0,
+						 nullptr, 0, nullptr, 1, vkc(&barrier)());
 }
 
 VulkanImage2D::VulkanImage2D(VulkanNRI &nri, uint32_t width, uint32_t height, Format format, ImageUsage usage)
@@ -916,7 +818,9 @@ VulkanImage2D::VulkanImage2D(VulkanNRI &nri, uint32_t width, uint32_t height, Fo
 								  static_cast<vk::ImageUsageFlagBits>(usage), vk::SharingMode::eExclusive, 0, nullptr,
 								  vk::ImageLayout::eUndefined);
 
-	this->image = vk::raii::Image(nri.getDevice(), imageInfo);
+	vk::Image img = nullptr;
+	vkCreateImage(nri.getDevice(), &*imageInfo, nullptr, vkc(&img)());
+	this->image = vkraii::Image((vk::Device)*device, img);
 }
 
 std::unique_ptr<ImageView> VulkanImage2D::createRenderTargetView() {
@@ -933,9 +837,10 @@ std::unique_ptr<CommandPool> VulkanNRI::createCommandPool() {
 	vk::CommandPoolCreateInfo poolCI(vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
 									 queueFamilyIndices.graphicsFamily.value());
 
-	vk::raii::CommandPool pool = vk::raii::CommandPool(device, poolCI);
+	vk::CommandPool pool = nullptr;
+	vkCreateCommandPool(device, &*poolCI, nullptr, vkc(&pool)());
 
-	return std::make_unique<VulkanCommandPool>(std::move(pool));
+	return std::make_unique<VulkanCommandPool>(vkraii::CommandPool(device.device, pool));
 }
 
 std::unique_ptr<ProgramBuilder> VulkanNRI::createProgramBuilder() {
@@ -943,24 +848,42 @@ std::unique_ptr<ProgramBuilder> VulkanNRI::createProgramBuilder() {
 }
 
 std::unique_ptr<CommandQueue> VulkanNRI::createCommandQueue() {
-	vk::raii::Queue queue = vk::raii::Queue(device, queueFamilyIndices.graphicsFamily.value(), 0);
+	vk::Queue queue = nullptr;
+	vkGetDeviceQueue(device, queueFamilyIndices.graphicsFamily.value(), 0, vkc(&queue)());
 
-	return std::make_unique<VulkanCommandQueue>(std::move(queue));
+	return std::make_unique<VulkanCommandQueue>(vkraii::Queue(device.device, queue));
 };
 
 VulkanWindow::VulkanWindow(VulkanNRI &nri)
 	: Window(nri),
 	  surface(nullptr),
-	  swapChain(nullptr),
+	  swapChain(),
 	  presentQueue(nullptr),
-	  imageAvailableSemaphore(nri.getDevice(), vk::SemaphoreCreateInfo()),
-	  renderFinishedSemaphore(nri.getDevice(), vk::SemaphoreCreateInfo()),
-	  inFlightFence(nri.getDevice(), vk::FenceCreateInfo(vk::FenceCreateFlagBits::eSignaled)) {
+	  imageAvailableSemaphore(nullptr),
+	  renderFinishedSemaphore(nullptr),
+	  inFlightFence(nullptr) {
+	vk::Semaphore			semaphore = nullptr;
+	vk::SemaphoreCreateInfo semaphoreInfo;
+	vkCreateSemaphore(nri.getDevice(), vkc(&semaphoreInfo)(), nullptr, vkc(&semaphore)());
+	imageAvailableSemaphore = vkraii::Semaphore(nri.getDevice().device, semaphore);
+
+	vkCreateSemaphore(nri.getDevice(), vkc(&semaphoreInfo)(), nullptr, vkc(&semaphore)());
+	renderFinishedSemaphore = vkraii::Semaphore(nri.getDevice().device, semaphore);
+
+	vk::FenceCreateInfo fenceInfo(vk::FenceCreateFlagBits::eSignaled);
+	vk::Fence			fence = nullptr;
+	vkCreateFence(nri.getDevice(), vkc(&fenceInfo)(), nullptr, vkc(&fence)());
+	inFlightFence = vkraii::Fence(nri.getDevice().device, fence);
+
 	if (imageAvailableSemaphore == nullptr || renderFinishedSemaphore == nullptr || inFlightFence == nullptr) {
 		throw std::runtime_error("Failed to create synchronization objects for a frame!");
 	}
 	commandBuffer = std::unique_ptr<VulkanCommandBuffer>(
 		(VulkanCommandBuffer *)nri.createCommandBuffer(nri.getDefaultCommandPool()).release());
+}
+
+VulkanWindow::~VulkanWindow() {
+	if (swapChain) vkb::destroy_swapchain(swapChain);
 }
 
 static std::pair<vk::Format, vk::ColorSpaceKHR> chooseSurfaceFormat(
@@ -983,12 +906,18 @@ static std::pair<vk::Format, vk::ColorSpaceKHR> chooseSurfaceFormat(
 	return {availableFormats[0].format, availableFormats[0].colorSpace};
 }
 
-void VulkanWindow::setSurface(vk::raii::SurfaceKHR &&surface) {
+void VulkanWindow::setSurface(vkraii::SurfaceKHR &&surface) {
 	auto &nri = static_cast<VulkanNRI &>(this->nri);
 
 	this->surface = std::move(surface);
 
-	auto surfaceformats = nri.getPhysicalDevice().getSurfaceFormatsKHR(*this->surface);
+	std::vector<vk::SurfaceFormatKHR> surfaceformats;
+	uint32_t						  surfaceFormatCount;
+	vkGetPhysicalDeviceSurfaceFormatsKHR(nri.getPhysicalDevice(), *this->surface, &surfaceFormatCount, nullptr);
+	surfaceformats.resize(surfaceFormatCount);
+	vkGetPhysicalDeviceSurfaceFormatsKHR(nri.getPhysicalDevice(), *this->surface, &surfaceFormatCount,
+										 (VkSurfaceFormatKHR *)surfaceformats.data());
+
 	if (surfaceformats.empty()) { throw std::runtime_error("Failed to get Vulkan surface formats!"); }
 	std::tie(surfaceFormat, surfaceColorSpace) = chooseSurfaceFormat(surfaceformats);
 	dbLog(dbg::LOG_INFO, "Chosen surface format: ", vk::to_string(surfaceFormat),
@@ -996,40 +925,42 @@ void VulkanWindow::setSurface(vk::raii::SurfaceKHR &&surface) {
 }
 
 void VulkanWindow::createSwapChain(uint32_t &width, uint32_t &height) {
+	dbLog(dbg::LOG_INFO, "Creating swapchain for window with size ", width, "x", height);
 	this->width	 = width;
 	this->height = height;
 	auto &nri	 = static_cast<VulkanNRI &>(this->nri);
 	if (this->surface == nullptr) { THROW_RUNTIME_ERR("surface is not set for VulkanWindow!"); }
 
-	vk::SurfaceCapabilitiesKHR capabilities = nri.getPhysicalDevice().getSurfaceCapabilitiesKHR(*surface);
-	width									= capabilities.currentExtent.width;
-	width									= std::min(capabilities.maxImageExtent.width, width);
-	height									= capabilities.currentExtent.height;
-	height									= std::min(capabilities.maxImageExtent.height, height);
+	vk::SurfaceCapabilitiesKHR capabilities;
+	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(nri.getPhysicalDevice(), *surface,
+											  (VkSurfaceCapabilitiesKHR *)&capabilities);
+	width  = std::clamp(width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
+	height = std::clamp(height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
 
-	dbLog(dbg::LOG_INFO, "Creating swap chain with size: ", width, "x", height);
+	vkb::SwapchainBuilder swapchainBuilder{nri.getPhysicalDevice(), nri.getDevice(), *surface};
+	swapchainBuilder.set_desired_present_mode((VkPresentModeKHR)vk::PresentModeKHR::eFifo);
+	swapchainBuilder.set_desired_format((VkSurfaceFormatKHR)vk::SurfaceFormatKHR(surfaceFormat, surfaceColorSpace));
+	swapchainBuilder.set_desired_extent(width, height);
+	swapchainBuilder.set_desired_min_image_count(capabilities.minImageCount + 1);
+	swapchainBuilder.set_required_min_image_count(capabilities.minImageCount);
+	swapchainBuilder.set_old_swapchain(swapChain);
+	swapchainBuilder.set_image_usage_flags(
+		VkImageUsageFlags(vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferDst));
+	swapchainBuilder.set_pre_transform_flags(VkSurfaceTransformFlagBitsKHR(vk::SurfaceTransformFlagBitsKHR::eIdentity));
 
-	vk::SwapchainCreateInfoKHR swapChainInfo(
-		{}, *surface, capabilities.minImageCount + 1, this->surfaceFormat, this->surfaceColorSpace, {width, height}, 1,
-		vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferDst, vk::SharingMode::eExclusive, 0,
-		nullptr, vk::SurfaceTransformFlagBitsKHR::eIdentity, vk::CompositeAlphaFlagBitsKHR::eOpaque,
-		vk::PresentModeKHR::eFifo, VK_TRUE, *swapChain);
-
-	static PFN_vkCreateSwapchainKHR vkCreateSwapchainKHR =
-		reinterpret_cast<PFN_vkCreateSwapchainKHR>(nri.getInstance().getProcAddr("vkCreateSwapchainKHR"));
-	assert(vkCreateSwapchainKHR != nullptr);
-
-	VkSwapchainKHR _swapChain;
-	if (vkCreateSwapchainKHR(*nri.getDevice(), (VkSwapchainCreateInfoKHR *)&swapChainInfo, nullptr, &_swapChain) !=
-		VK_SUCCESS) {
-		throw std::runtime_error("Failed to create Vulkan swap chain!");
+	auto swapchainResult = swapchainBuilder.build();
+	if (!swapchainResult.has_value()) {
+		THROW_RUNTIME_ERR(std::format("Failed to create swapchain: {}", swapchainResult.error().message()));
 	}
+	swapChain = std::move(swapchainResult.value());
 
 	this->swapChainImages.clear();
-	vk::SwapchainKHR oldswapchain = swapChain.release();
-	vkDestroySwapchainKHR(*nri.getDevice(), oldswapchain, nullptr);
-	swapChain			 = vk::raii::SwapchainKHR(nri.getDevice(), _swapChain);
-	auto swapChainImages = swapChain.getImages();
+	std::vector<vk::Image> swapChainImages;
+	uint32_t			   imageCount;
+	vkGetSwapchainImagesKHR(nri.getDevice(), swapChain, &imageCount, nullptr);
+	swapChainImages.resize(imageCount);
+	vkGetSwapchainImagesKHR(nri.getDevice(), swapChain, &imageCount, (VkImage *)swapChainImages.data());
+
 	for (const auto &image : swapChainImages) {
 		VulkanImage2D nriImage = VulkanImage2D(nri, image, vk::ImageLayout::eUndefined, vk::Format::eB8G8R8A8Unorm,
 											   nri.getDevice(), width, height);
@@ -1046,14 +977,20 @@ void VulkanWindow::createSwapChain(uint32_t &width, uint32_t &height) {
 void VulkanWindow::beginFrame() {
 	auto &nri = static_cast<const VulkanNRI &>(this->nri);
 
-	auto result = nri.getDevice().waitForFences({inFlightFence}, VK_TRUE, UINT64_MAX);
+	vk::Result result =
+		(vk::Result)vkWaitForFences(nri.getDevice(), 1, (VkFence *)&*inFlightFence, VK_TRUE, UINT64_MAX);
 	assert(result == vk::Result::eSuccess);
-	nri.getDevice().resetFences({inFlightFence});
+	// nri.getDevice().resetFences({inFlightFence});
+	result = (vk::Result)vkResetFences(nri.getDevice(), 1, (VkFence *)&*inFlightFence);
 	assert(result == vk::Result::eSuccess);
-	auto imageIndex			= swapChain.acquireNextImage(UINT64_MAX, *imageAvailableSemaphore, nullptr);
-	this->currentImageIndex = imageIndex.value;
+	// auto imageIndex			= swapChain.acquireNextImage(UINT64_MAX, *imageAvailableSemaphore, nullptr);
+	uint32_t imageIndex;
+	result = (vk::Result)vkAcquireNextImageKHR(nri.getDevice(), swapChain, UINT64_MAX, *imageAvailableSemaphore,
+											   nullptr, &imageIndex);
+	assert(result == vk::Result::eSuccess || result == vk::Result::eSuboptimalKHR);
+	this->currentImageIndex = imageIndex;
 
-	swapChainImages[imageIndex.value].image.transitionLayout(
+	swapChainImages[imageIndex].image.transitionLayout(
 		*commandBuffer, vk::ImageLayout::eColorAttachmentOptimal, vk::AccessFlagBits::eMemoryRead,
 		vk::AccessFlagBits::eColorAttachmentWrite, vk::PipelineStageFlagBits::eBottomOfPipe,
 		vk::PipelineStageFlagBits::eColorAttachmentOutput);
@@ -1071,20 +1008,19 @@ void VulkanWindow::endFrame() {
 	commandBuffer->end();
 	auto				  &nri	  = static_cast<const VulkanNRI &>(this->nri);
 	vk::PipelineStageFlags stages = {vk::PipelineStageFlagBits::eColorAttachmentOutput};
-	presentQueue.queue.submit(vk::SubmitInfo(1, &(*imageAvailableSemaphore), &stages, 1, &*commandBuffer->commandBuffer,
-											 1, &(*renderFinishedSemaphore)),
-							  *inFlightFence);
+	vk::SubmitInfo		   submitInfo(1, &(*imageAvailableSemaphore), &stages, 1, &*commandBuffer->commandBuffer, 1,
+									  &(*renderFinishedSemaphore));
+	vkQueueSubmit(*presentQueue.queue, 1, &*submitInfo, *inFlightFence);
 
-	vk::PresentInfoKHR presentInfo =
-		vk::PresentInfoKHR(1, &*renderFinishedSemaphore, 1, &*swapChain, &currentImageIndex, nullptr);
+	vk::PresentInfoKHR presentInfo = vk::PresentInfoKHR(
+		1, &*renderFinishedSemaphore, 1, (vk::SwapchainKHR *)&swapChain.swapchain, &currentImageIndex, nullptr);
 
-	// result = presentQueue.presentKHR(presentInfo);
 	vk::Result res = (vk::Result)vkQueuePresentKHR(*presentQueue.queue, &*presentInfo);
 	switch (res) {
 		case vk::Result::eSuccess: break;
 		case vk::Result::eErrorOutOfDateKHR:
 		case vk::Result::eSuboptimalKHR:
-			vkDeviceWaitIdle(*nri.getDevice());
+			vkDeviceWaitIdle(nri.getDevice());
 			uint32_t width, height;
 			createSwapChain(width, height);
 			break;
@@ -1092,7 +1028,7 @@ void VulkanWindow::endFrame() {
 		default: assert(res == vk::Result::eSuccess);
 	}
 
-	presentQueue.queue.waitIdle();
+	vkQueueWaitIdle(*presentQueue.queue);
 }
 
 void VulkanWindow::beginRendering(CommandBuffer &cmdBuf, const ImageAndViewRef &renderTarget) {
@@ -1101,13 +1037,14 @@ void VulkanWindow::beginRendering(CommandBuffer &cmdBuf, const ImageAndViewRef &
 	auto &rt	   = *rtp;
 	auto &img	   = static_cast<const VulkanImage2D &>(renderTarget.image);
 	auto &vkCmdBuf = static_cast<VulkanCommandBuffer &>(cmdBuf);
+	auto &vknri	   = static_cast<const VulkanNRI &>(this->nri);
 
 	vk::RenderingInfo renderingInfo{};
 	renderingInfo.sType		 = vk::StructureType::eRenderingInfo;
 	renderingInfo.renderArea = vk::Rect2D({0, 0}, {img.getWidth(), img.getHeight()});
 	vk::RenderingAttachmentInfo colorAttachment{};
 	colorAttachment.sType		= vk::StructureType::eRenderingAttachmentInfo;
-	colorAttachment.imageView	= rt.get();
+	colorAttachment.imageView	= *rt.get();
 	colorAttachment.imageLayout = vk::ImageLayout::eColorAttachmentOptimal;
 	colorAttachment.loadOp		= vk::AttachmentLoadOp::eClear;
 	colorAttachment.storeOp		= vk::AttachmentStoreOp::eStore;
@@ -1118,15 +1055,19 @@ void VulkanWindow::beginRendering(CommandBuffer &cmdBuf, const ImageAndViewRef &
 	renderingInfo.pColorAttachments	   = &colorAttachment;
 	renderingInfo.layerCount		   = 1;
 
-	vkCmdBuf.commandBuffer.beginRendering(renderingInfo);
+	vknri.getDispatchTable().cmdBeginRenderingKHR(vkCmdBuf.commandBuffer, vkc(&renderingInfo)());
 
-	vkCmdBuf.commandBuffer.setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(img.getWidth()),
-													   static_cast<float>(img.getHeight()), 0.0f, 1.0f));
-	vkCmdBuf.commandBuffer.setScissor(0, vk::Rect2D({0, 0}, {img.getWidth(), img.getHeight()}));
+	vk::Viewport viewport(0.0f, 0.0f, static_cast<float>(img.getWidth()), static_cast<float>(img.getHeight()), 0.0f,
+						  1.0f);
+	vkCmdSetViewport(vkCmdBuf.commandBuffer, 0, 1, vkc(&viewport)());
+
+	vk::Rect2D rect({0, 0}, {img.getWidth(), img.getHeight()});
+	vkCmdSetScissor(vkCmdBuf.commandBuffer, 0, 1, vkc(&rect)());
 }
 
 void VulkanWindow::endRendering(CommandBuffer &cmdBuf) {
-	static_cast<VulkanCommandBuffer &>(cmdBuf).commandBuffer.endRendering();
+	auto &vknri = static_cast<const VulkanNRI &>(this->nri);
+	vknri.getDispatchTable().cmdEndRenderingKHR(static_cast<VulkanCommandBuffer &>(cmdBuf).commandBuffer);
 }
 
 vk::PrimitiveTopology nriPrimitiveType2vkTopology[] = {
@@ -1135,10 +1076,10 @@ vk::PrimitiveTopology nriPrimitiveType2vkTopology[] = {
 };
 
 // TODO: merge with DX12 implementation
-std::pair<std::vector<vk::raii::ShaderModule>, std::vector<vk::PipelineShaderStageCreateInfo>> VulkanProgramBuilder::
-	createShaderModules(std::vector<ShaderCreateInfo> &&stagesInfo, const vk::raii::Device &device) {
+std::pair<std::vector<vkraii::ShaderModule>, std::vector<vk::PipelineShaderStageCreateInfo>> VulkanProgramBuilder::
+	createShaderModules(std::vector<ShaderCreateInfo> &&stagesInfo, const vkb::Device &device) {
 	std::vector<vk::PipelineShaderStageCreateInfo> shaderStages;
-	std::vector<vk::raii::ShaderModule>			   shaderModules;
+	std::vector<vkraii::ShaderModule>			   shaderModules;
 
 	CComPtr<IDxcCompiler3> compiler;
 #ifndef NDEBUG
@@ -1256,7 +1197,9 @@ std::pair<std::vector<vk::raii::ShaderModule>, std::vector<vk::PipelineShaderSta
 													reinterpret_cast<const uint32_t *>(shaderdata.data));
 #endif
 
-		shaderModules.emplace_back(device, shaderModuleInfo);
+		vk::ShaderModule shaderModule = nullptr;
+		vkCreateShaderModule(device, &*shaderModuleInfo, nullptr, vkc(&shaderModule)());
+		shaderModules.push_back(vkraii::ShaderModule(device.device, shaderModule));
 
 		vk::PipelineShaderStageCreateInfo shaderStageInfo({}, stage, *shaderModules.back(),
 														  stageInfo.entryPoint.c_str());
@@ -1289,7 +1232,8 @@ std::unique_ptr<GraphicsProgram> VulkanProgramBuilder::buildGraphicsProgram() {
 	pipelineLayoutInfo.setPPushConstantRanges(pushConstantRanges.data());
 	pipelineLayoutInfo.setSetLayoutCount(1);
 	pipelineLayoutInfo.setPSetLayouts(&*nri.getDescriptorAllocator().getDescriptorSetLayout());
-	auto pipelineLayout = vk::raii::PipelineLayout(nri.getDevice(), pipelineLayoutInfo);
+	vk::PipelineLayout pipelineLayout = nullptr;
+	vkCreatePipelineLayout(nri.getDevice(), &*pipelineLayoutInfo, nullptr, vkc(&pipelineLayout)());
 
 	std::vector<vk::VertexInputBindingDescription>	 bindingDescriptions;
 	std::vector<vk::VertexInputAttributeDescription> attributeDescriptions;
@@ -1337,21 +1281,21 @@ std::unique_ptr<GraphicsProgram> VulkanProgramBuilder::buildGraphicsProgram() {
 														vk::DynamicState::eBlendConstants};
 	vk::PipelineDynamicStateCreateInfo dynamicStateInfo({}, dynamicStates.size(), dynamicStates.data());
 
-	// vk::PipelineDepthStencilStateCreateInfo depthStencilInfo({}, VK_FALSE, VK_FALSE, vk::CompareOp::eLess, VK_FALSE,
-	//														 VK_FALSE, vk::StencilOpState(), vk::StencilOpState(), 0.0f,
-	//														 1.0f);
-
 	vk::Format						colorFormat = vk::Format::eB8G8R8A8Unorm;
 	vk::PipelineRenderingCreateInfo pipelineRenderingInfo(0, 1, &colorFormat);
 
 	vk::GraphicsPipelineCreateInfo pipelineInfo(
 		{}, static_cast<uint32_t>(shaderStages.size()), shaderStages.data(), &vertexInputInfo, &inputAssemblyInfo,
-		nullptr,	 // tessellation
-		&viewportStateInfo, &rasterizerInfo, &multisampleInfo, {}, &colorBlending, &dynamicStateInfo, *pipelineLayout,
-		vk::RenderPass(nullptr), 0, nullptr, -1, &pipelineRenderingInfo);
+		nullptr,													   // tessellation
+		&viewportStateInfo, &rasterizerInfo, &multisampleInfo, {},	   // depth stencil
+		&colorBlending, &dynamicStateInfo, pipelineLayout, vk::RenderPass(nullptr), 0, nullptr, -1,
+		&pipelineRenderingInfo);
 
-	auto pipelines = nri.getDevice().createGraphicsPipelines(nullptr, {pipelineInfo});
-	return std::make_unique<VulkanGraphicsProgram>(nri, std::move(pipelines[0]), std::move(pipelineLayout));
+	vk::Pipeline pipeline = nullptr;
+	vkCreateGraphicsPipelines(nri.getDevice(), nullptr, 1, &*pipelineInfo, nullptr, vkc(&pipeline)());
+
+	return std::make_unique<VulkanGraphicsProgram>(nri, vkraii::Pipeline(nri.getDevice().device, pipeline),
+												   vkraii::PipelineLayout(nri.getDevice().device, pipelineLayout));
 }
 
 std::unique_ptr<ComputeProgram> VulkanProgramBuilder::buildComputeProgram() {
@@ -1359,12 +1303,15 @@ std::unique_ptr<ComputeProgram> VulkanProgramBuilder::buildComputeProgram() {
 	assert(shaderStages.size() == 1 && "Compute program must have exactly one shader stage.");
 
 	vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};
-	auto						 pipelineLayout = vk::raii::PipelineLayout(nri.getDevice(), pipelineLayoutInfo);
+	vk::PipelineLayout			 pipelineLayout = nullptr;
+	vkCreatePipelineLayout(nri.getDevice(), &*pipelineLayoutInfo, nullptr, vkc(&pipelineLayout)());
 
-	vk::ComputePipelineCreateInfo pipelineInfo({}, shaderStages[0], *pipelineLayout);
+	vk::ComputePipelineCreateInfo pipelineInfo({}, shaderStages[0], pipelineLayout);
 
-	auto pipelines = nri.getDevice().createComputePipelines(nullptr, {pipelineInfo});
-	return std::make_unique<VulkanComputeProgram>(nri, std::move(pipelines[0]), std::move(pipelineLayout));
+	vk::Pipeline pipeline = nullptr;
+	vkCreateComputePipelines(nri.getDevice(), nullptr, 1, &*pipelineInfo, nullptr, vkc(&pipeline)());
+	return std::make_unique<VulkanComputeProgram>(nri, vkraii::Pipeline(nri.getDevice().device, pipeline),
+												  vkraii::PipelineLayout(nri.getDevice().device, pipelineLayout));
 }
 
 std::unique_ptr<RayTracingProgram> VulkanProgramBuilder::buildRayTracingProgram(nri::CommandBuffer &commandBuffer) {
@@ -1376,10 +1323,11 @@ std::unique_ptr<RayTracingProgram> VulkanProgramBuilder::buildRayTracingProgram(
 
 void VulkanProgram::bind(CommandBuffer &commandBuffer) {
 	auto &vkCmdBuf = static_cast<VulkanCommandBuffer &>(commandBuffer);
-	vkCmdBuf.commandBuffer.bindPipeline(bindPoint, *pipeline);
+	vkCmdBindPipeline(vkCmdBuf.commandBuffer, (VkPipelineBindPoint)bindPoint, pipeline);
 
 	auto &descriptorSet = static_cast<VulkanNRI &>(nri).getDescriptorAllocator().getDescriptorSet();
-	vkCmdBuf.commandBuffer.bindDescriptorSets(bindPoint, *pipelineLayout, 0, *descriptorSet, {});
+	vkCmdBindDescriptorSets(vkCmdBuf.commandBuffer, (VkPipelineBindPoint)bindPoint, *pipelineLayout, 0, 1,
+							vkc(&*descriptorSet)(), 0, nullptr);
 }
 
 void VulkanProgram::unbind(CommandBuffer &commandBuffer) {
@@ -1397,19 +1345,19 @@ void VulkanProgram::setPushConstants(CommandBuffer &commandBuffer, const void *d
 void VulkanGraphicsProgram::draw(CommandBuffer &commandBuffer, uint32_t vertexCount, uint32_t instanceCount,
 								 uint32_t firstVertex, uint32_t firstInstance) {
 	auto &vkCmdBuf = static_cast<VulkanCommandBuffer &>(commandBuffer);
-	vkCmdBuf.commandBuffer.draw(vertexCount, instanceCount, firstVertex, firstInstance);
+	vkCmdDraw(vkCmdBuf.commandBuffer, vertexCount, instanceCount, firstVertex, firstInstance);
 }
 
 void VulkanGraphicsProgram::drawIndexed(CommandBuffer &commandBuffer, uint32_t indexCount, uint32_t instanceCount,
 										uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) {
 	auto &vkCmdBuf = static_cast<VulkanCommandBuffer &>(commandBuffer);
-	vkCmdBuf.commandBuffer.drawIndexed(indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+	vkCmdDrawIndexed(vkCmdBuf.commandBuffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
 }
 
 void VulkanComputeProgram::dispatch(CommandBuffer &commandBuffer, uint32_t groupCountX, uint32_t groupCountY,
 									uint32_t groupCountZ) {
 	auto &vkCmdBuf = static_cast<VulkanCommandBuffer &>(commandBuffer);
-	vkCmdBuf.commandBuffer.dispatch(groupCountX, groupCountY, groupCountZ);
+	vkCmdDispatch(vkCmdBuf.commandBuffer, groupCountX, groupCountY, groupCountZ);
 }
 
 void VulkanMemoryCache::assureSize(VulkanNRI &nri, std::size_t size) {
@@ -1443,265 +1391,30 @@ std::unique_ptr<Window> VulkanNRI::createGLFWWindow(GLFWwindow *glfwWindow) {
 	vk::SurfaceKHR surface;
 	{
 		VkSurfaceKHR cSurface;
-		VkResult	 result = glfwCreateWindowSurface(*instance, glfwWindow, nullptr, &cSurface);
+		VkResult	 result = glfwCreateWindowSurface(instance, glfwWindow, nullptr, &cSurface);
 		if (result != VK_SUCCESS) {
 			THROW_RUNTIME_ERR(std::format("Failed to create Vulkan surface for GLFW window: {}", int(result)));
 		}
 		surface = vk::SurfaceKHR(cSurface);
 	}
 	auto window = std::make_unique<VulkanWindow>(*this);
-	window->setSurface(vk::raii::SurfaceKHR(instance, surface));
+	window->setSurface(vkraii::SurfaceKHR(instance.instance, surface));
 
-	vk::Bool32 presentSupport =
-		physicalDevice.getSurfaceSupportKHR(queueFamilyIndices.graphicsFamily.value(), *window->getSurface());
+	vk::Bool32 presentSupport;
+	vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, queueFamilyIndices.graphicsFamily.value(),
+										 *window->getSurface(), &presentSupport);
+
 	if (!presentSupport) { throw std::runtime_error("Selected GPU does not support presentation to the surface!"); }
 
 	uint32_t width;
 	uint32_t height;
 	window->createSwapChain(width, height);
 
-	vk::raii::Queue presentQueue = vk::raii::Queue(device, queueFamilyIndices.graphicsFamily.value(), 0);
-	window->getPresentQueue()	 = std::move(presentQueue);
+	vk::Queue presentQueue;
+	vkGetDeviceQueue(device, queueFamilyIndices.graphicsFamily.value(), 0, vkc(&presentQueue)());
+	window->getPresentQueue() = vkraii::Queue(device.device, presentQueue);
 
 	return window;
-}
-
-VulkanBLAS::VulkanBLAS(VulkanNRI &nri, VulkanBuffer &vertexBuffer, Format vertexFormat, std::size_t vertexOffset,
-					   uint32_t vertexCount, std::size_t vertexStride, VulkanBuffer &indexBuffer, IndexType indexType,
-					   std::size_t indexOffset)
-	: nri(&nri), accelerationStructure(nullptr), asBuffer(nullptr), asMemory(nullptr), indexOffset(indexOffset) {
-	assert(vertexFormat != Format::FORMAT_UNDEFINED);
-	assert(vertexFormat < Format::_FORMAT_NUM);
-	vk::Format	  vkVertexFormat = (vk::Format)nriFormat2vkFormat[static_cast<int>(vertexFormat)];
-	vk::IndexType vkIndexType	 = (vk::IndexType)nriIndexType2vkIndexType[static_cast<int>(indexType)];
-
-	vk::AccelerationStructureGeometryTrianglesDataKHR trianglesData(
-		vkVertexFormat, vertexBuffer.getAddress(), vertexStride, vertexCount, vkIndexType, indexBuffer.getAddress());
-	this->tempBuildInfo				  = std::make_unique<TemporaryBuildInfo>();
-	this->tempBuildInfo->vertexBuffer = &vertexBuffer;
-	this->tempBuildInfo->indexBuffer  = &indexBuffer;
-
-	this->tempBuildInfo->geometry = vk::AccelerationStructureGeometryKHR(vk::GeometryTypeKHR::eTriangles, trianglesData,
-																		 vk::GeometryFlagBitsKHR::eOpaque);
-	std::size_t primitiveCount	  = -1;
-	if (indexType == IndexType::INDEX_TYPE_UINT16) primitiveCount = indexBuffer.getSize() / sizeof(uint16_t) / 3;
-	else if (indexType == IndexType::INDEX_TYPE_UINT32) primitiveCount = indexBuffer.getSize() / sizeof(uint32_t) / 3;
-
-	this->tempBuildInfo->buildRangeInfo =
-		vk::AccelerationStructureBuildRangeInfoKHR(primitiveCount, vertexOffset, 0, 0);
-	this->tempBuildInfo->buildGeometryInfo = vk::AccelerationStructureBuildGeometryInfoKHR(
-		vk::AccelerationStructureTypeKHR::eBottomLevel, vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace,
-		vk::BuildAccelerationStructureModeKHR::eBuild, {}, this->accelerationStructure, 1,
-		&this->tempBuildInfo->geometry);
-
-	this->tempBuildInfo->sizeInfo = nri.getDevice().getAccelerationStructureBuildSizesKHR(
-		vk::AccelerationStructureBuildTypeKHR::eDevice, this->tempBuildInfo->buildGeometryInfo,
-		{this->tempBuildInfo->buildRangeInfo.primitiveCount});
-
-	this->asBuffer = VulkanBuffer(nri, this->tempBuildInfo->sizeInfo.accelerationStructureSize,
-								  BufferUsage::BUFFER_USAGE_ACCELERATION_STRUCTURE);
-	this->asMemory =
-		VulkanAllocation(nri, asBuffer.getMemoryRequirements().setTypeRequest(MemoryTypeRequest::MEMORY_TYPE_DEVICE));
-	this->asBuffer.bindMemory(asMemory, 0);
-
-	vk::AccelerationStructureCreateInfoKHR asCreateInfo({}, asBuffer.getBuffer(), 0,
-														this->tempBuildInfo->sizeInfo.accelerationStructureSize,
-														vk::AccelerationStructureTypeKHR::eBottomLevel);
-
-	this->tempBuildInfo->scratchBuffer =
-		VulkanBuffer(nri, this->tempBuildInfo->sizeInfo.buildScratchSize,
-					 BufferUsage::BUFFER_USAGE_STORAGE | BufferUsage::BUFFER_USAGE_TRANSFER_SRC |
-						 BufferUsage::BUFFER_USAGE_TRANSFER_DST);
-
-	this->tempBuildInfo->scratchMemory = VulkanAllocation(
-		nri,
-		tempBuildInfo->scratchBuffer.getMemoryRequirements().setTypeRequest(MemoryTypeRequest::MEMORY_TYPE_DEVICE));
-	this->tempBuildInfo->scratchBuffer.bindMemory(this->tempBuildInfo->scratchMemory, 0);
-
-	this->tempBuildInfo->buildGeometryInfo.scratchData.setDeviceAddress(
-		this->tempBuildInfo->scratchBuffer.getAddress());
-
-	this->accelerationStructure = nri.getDevice().createAccelerationStructureKHR(asCreateInfo);
-	this->tempBuildInfo->buildGeometryInfo.dstAccelerationStructure = this->accelerationStructure;
-}
-
-void VulkanBLAS::build(CommandBuffer &commandBuffer) {
-	auto &vkCmdBuf = static_cast<VulkanCommandBuffer &>(commandBuffer);
-
-	assert(this->tempBuildInfo != nullptr);
-	const auto &buildGeometryInfo = this->tempBuildInfo->buildGeometryInfo;
-	const auto &buildRangeInfos	  = this->tempBuildInfo->buildRangeInfo;
-
-	vk::MemoryBarrier memoryBarrier(vk::AccessFlagBits::eAccelerationStructureWriteKHR,
-									vk::AccessFlagBits::eAccelerationStructureReadKHR);
-	// buffer barrier to wait for vertex and index buffer transfer writes to finish
-	vk::BufferMemoryBarrier vertexBufferBarrier(
-		vk::AccessFlagBits::eTransferWrite,
-		vk::AccessFlagBits::eAccelerationStructureReadKHR | vk::AccessFlagBits::eShaderRead, VK_QUEUE_FAMILY_IGNORED,
-		VK_QUEUE_FAMILY_IGNORED, this->tempBuildInfo->vertexBuffer->getBuffer(), 0,
-		this->tempBuildInfo->vertexBuffer->getSize());
-	vk::BufferMemoryBarrier indexBufferBarrier(
-		vk::AccessFlagBits::eTransferWrite,
-		vk::AccessFlagBits::eAccelerationStructureReadKHR | vk::AccessFlagBits::eShaderRead, VK_QUEUE_FAMILY_IGNORED,
-		VK_QUEUE_FAMILY_IGNORED, this->tempBuildInfo->indexBuffer->getBuffer(), 0,
-		this->tempBuildInfo->indexBuffer->getSize());
-
-	vkCmdBuf.commandBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eAccelerationStructureBuildKHR,
-										   vk::PipelineStageFlagBits::eAccelerationStructureBuildKHR, {},
-										   {memoryBarrier}, {vertexBufferBarrier, indexBufferBarrier}, {});
-
-	vkCmdBuf.commandBuffer.buildAccelerationStructuresKHR(buildGeometryInfo, &buildRangeInfos);
-
-	vk::MemoryBarrier postBuildBarrier(vk::AccessFlagBits::eAccelerationStructureWriteKHR,
-									   vk::AccessFlagBits::eAccelerationStructureReadKHR);
-	vkCmdBuf.commandBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eAccelerationStructureBuildKHR,
-										   vk::PipelineStageFlagBits::eRayTracingShaderKHR, {}, {postBuildBarrier}, {},
-										   {});
-}
-
-void VulkanBLAS::buildFinished() { this->tempBuildInfo.reset(); }
-
-vk::DeviceAddress VulkanBLAS::getAddress() const {
-	vk::AccelerationStructureDeviceAddressInfoKHR addressInfo(this->accelerationStructure);
-	return nri->getDevice().getAccelerationStructureAddressKHR(addressInfo);
-}
-
-VulkanTLAS::VulkanTLAS(VulkanNRI &nri, const std::span<const BLAS *> &blases,
-					   std::optional<std::span<glm::mat3x4>> transforms)
-	: nri(&nri), as(nullptr), asBuffer(nullptr), asMemory(nullptr) {
-	tempBuildInfo = std::make_unique<TemporaryBuildInfo>();
-
-	tempBuildInfo->instanceUploadBuffer =
-		VulkanBuffer(nri, sizeof(vk::AccelerationStructureInstanceKHR) * blases.size(),
-					 BufferUsage::BUFFER_USAGE_TRANSFER_SRC | BufferUsage::BUFFER_USAGE_TRANSFER_DST);
-	tempBuildInfo->instanceUploadMemory =
-		VulkanAllocation(nri, tempBuildInfo->instanceUploadBuffer.getMemoryRequirements().setTypeRequest(
-								  MemoryTypeRequest::MEMORY_TYPE_UPLOAD));
-	tempBuildInfo->instanceUploadBuffer.bindMemory(tempBuildInfo->instanceUploadMemory, 0);
-	{
-		vk::AccelerationStructureInstanceKHR *data =
-			(vk::AccelerationStructureInstanceKHR *)tempBuildInfo->instanceUploadBuffer.map(
-				0, tempBuildInfo->instanceUploadBuffer.getSize());
-		std::span<vk::AccelerationStructureInstanceKHR> instances{data,
-																  data + tempBuildInfo->instanceUploadBuffer.getSize()};
-
-		int i = 0;
-		for (const auto &blas : blases) {
-			auto								 &vulkanBLAS = static_cast<const VulkanBLAS &>(*blas);
-			vk::AccelerationStructureInstanceKHR &instance	 = instances[i];
-			if (transforms.has_value()) {
-				auto &t = transforms.value()[i];
-				std::memcpy(&instance.transform.matrix, &t, sizeof(glm::mat4x3));
-			} else {
-				glm::mat4x3 identity = glm::mat4x3(1.0f);
-				std::memcpy(&instance.transform.matrix, &identity, sizeof(glm::mat4x3));
-			}
-			instance.instanceCustomIndex					= i;
-			instance.mask									= 0xFF;
-			instance.instanceShaderBindingTableRecordOffset = 0;
-			instance.flags = (VkGeometryInstanceFlagsKHR)vk::GeometryInstanceFlagBitsKHR::eTriangleFacingCullDisable;
-			instance.accelerationStructureReference = vulkanBLAS.getAddress();
-			++i;
-		}
-		tempBuildInfo->instanceUploadBuffer.unmap();
-	}
-
-	// allocate instance buffer
-	tempBuildInfo->instanceBuffer =
-		VulkanBuffer(nri, tempBuildInfo->instanceUploadBuffer.getSize(),
-					 BufferUsage::BUFFER_USAGE_TRANSFER_DST | BufferUsage::BUFFER_USAGE_ACCELERATION_STRUCTURE);
-	tempBuildInfo->instanceMemory = VulkanAllocation(
-		nri,
-		tempBuildInfo->instanceBuffer.getMemoryRequirements().setTypeRequest(MemoryTypeRequest::MEMORY_TYPE_DEVICE));
-	tempBuildInfo->instanceBuffer.bindMemory(tempBuildInfo->instanceMemory, 0);
-	// will copy to it later
-
-	// get size info
-	vk::AccelerationStructureGeometryInstancesDataKHR instancesData(VK_FALSE,
-																	tempBuildInfo->instanceBuffer.getAddress());
-	tempBuildInfo->geometry = vk::AccelerationStructureGeometryKHR(vk::GeometryTypeKHR::eInstances, instancesData,
-																   vk::GeometryFlagBitsKHR::eOpaque);
-
-	tempBuildInfo->buildRangeInfo	 = vk::AccelerationStructureBuildRangeInfoKHR(blases.size(), 0, 0, 0);
-	tempBuildInfo->buildGeometryInfo = vk::AccelerationStructureBuildGeometryInfoKHR(
-		vk::AccelerationStructureTypeKHR::eTopLevel, vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace,
-		vk::BuildAccelerationStructureModeKHR::eBuild, {}, {}, 1, &tempBuildInfo->geometry, nullptr, nullptr);
-
-	vk::AccelerationStructureBuildSizesInfoKHR sizeInfo = nri.getDevice().getAccelerationStructureBuildSizesKHR(
-		vk::AccelerationStructureBuildTypeKHR::eDevice, tempBuildInfo->buildGeometryInfo,
-		{tempBuildInfo->buildRangeInfo.primitiveCount});
-
-	// create AS buffer and AS itself
-	this->asBuffer =
-		VulkanBuffer(nri, sizeInfo.accelerationStructureSize, BufferUsage::BUFFER_USAGE_ACCELERATION_STRUCTURE);
-	this->asMemory =
-		VulkanAllocation(nri, asBuffer.getMemoryRequirements().setTypeRequest(MemoryTypeRequest::MEMORY_TYPE_DEVICE));
-	this->asBuffer.bindMemory(asMemory, 0);
-
-	vk::AccelerationStructureCreateInfoKHR asCreateInfo({}, asBuffer.getBuffer(), 0,
-														sizeInfo.accelerationStructureSize);
-	this->as = nri.getDevice().createAccelerationStructureKHR(asCreateInfo);
-	tempBuildInfo->buildGeometryInfo.dstAccelerationStructure = this->as;
-
-	// create scratch buffer
-	tempBuildInfo->scratchBuffer =
-		VulkanBuffer(nri, sizeInfo.buildScratchSize,
-					 BufferUsage::BUFFER_USAGE_STORAGE | BufferUsage::BUFFER_USAGE_TRANSFER_SRC |
-						 BufferUsage::BUFFER_USAGE_TRANSFER_DST);
-	tempBuildInfo->scratchMemory = VulkanAllocation(
-		nri,
-		tempBuildInfo->scratchBuffer.getMemoryRequirements().setTypeRequest(MemoryTypeRequest::MEMORY_TYPE_DEVICE));
-	tempBuildInfo->scratchBuffer.bindMemory(tempBuildInfo->scratchMemory, 0);
-
-	tempBuildInfo->buildGeometryInfo.scratchData.setDeviceAddress(tempBuildInfo->scratchBuffer.getAddress());
-}
-
-void VulkanTLAS::build(CommandBuffer &commandBuffer) {
-	auto &vkCmdBuf = static_cast<VulkanCommandBuffer &>(commandBuffer);
-	assert(this->tempBuildInfo != nullptr);
-	vkCmdBuf.begin();
-
-	tempBuildInfo->instanceBuffer.copyFrom(commandBuffer, tempBuildInfo->instanceUploadBuffer, 0, 0,
-										   tempBuildInfo->instanceUploadBuffer.getSize());
-
-	vk::BufferMemoryBarrier instanceBufferBarrier(
-		vk::AccessFlagBits::eTransferWrite, vk::AccessFlagBits::eAccelerationStructureReadKHR, VK_QUEUE_FAMILY_IGNORED,
-		VK_QUEUE_FAMILY_IGNORED, this->tempBuildInfo->instanceBuffer.getBuffer(), 0,
-		this->tempBuildInfo->instanceBuffer.getSize());
-	vkCmdBuf.commandBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
-										   vk::PipelineStageFlagBits::eAccelerationStructureBuildKHR, {}, {},
-										   {instanceBufferBarrier}, {});
-
-	vkCmdBuf.commandBuffer.buildAccelerationStructuresKHR({this->tempBuildInfo->buildGeometryInfo},
-														  &this->tempBuildInfo->buildRangeInfo);
-
-	vk::MemoryBarrier postBuildBarrier(vk::AccessFlagBits::eAccelerationStructureWriteKHR,
-									   vk::AccessFlagBits::eAccelerationStructureReadKHR);
-	vkCmdBuf.commandBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eAccelerationStructureBuildKHR,
-										   vk::PipelineStageFlagBits::eRayTracingShaderKHR, {}, {postBuildBarrier}, {},
-										   {});
-}
-
-void VulkanTLAS::buildFinished() { this->tempBuildInfo.reset(); }
-
-ResourceHandle VulkanTLAS::getHandle() const {
-	if (handle == ResourceHandle::INVALID_HANDLE) {
-		handle = nri->getDescriptorAllocator().addAccelerationStructureDescriptor(*this);
-	}
-	return handle;
-}
-
-std::unique_ptr<BLAS> VulkanNRI::createBLAS(Buffer &vertexBuffer, Format vertexFormat, std::size_t vertexOffset,
-											uint32_t vertexCount, std::size_t vertexStride, Buffer &indexBuffer,
-											IndexType indexType, std::size_t indexOffset) {
-	return std::make_unique<VulkanBLAS>(*this, static_cast<VulkanBuffer &>(vertexBuffer), vertexFormat, vertexOffset,
-										vertexCount, vertexStride, static_cast<VulkanBuffer &>(indexBuffer), indexType,
-										indexOffset);
-}
-
-std::unique_ptr<TLAS> VulkanNRI::createTLAS(const std::span<const BLAS *>		 &blases,
-											std::optional<std::span<glm::mat3x4>> transforms) {
-	return std::make_unique<VulkanTLAS>(*this, blases, transforms);
 }
 
 std::unique_ptr<Allocation> VulkanNRI::allocateMemory(MemoryRequirements memoryRequirements) {
@@ -1711,21 +1424,24 @@ std::unique_ptr<Allocation> VulkanNRI::allocateMemory(MemoryRequirements memoryR
 std::unique_ptr<CommandBuffer> VulkanNRI::createCommandBuffer(const CommandPool &pool) {
 	vk::CommandBufferAllocateInfo allocInfo(static_cast<const VulkanCommandPool &>(pool).commandPool,
 											vk::CommandBufferLevel::ePrimary, 1);
-	vk::raii::CommandBuffers	  buffers(device, allocInfo);
-	return std::make_unique<VulkanCommandBuffer>(std::move(buffers[0]));
+	vk::CommandBuffer			  buffers;
+	vkAllocateCommandBuffers(device, &*allocInfo, vkc(&buffers)());
+	return std::make_unique<VulkanCommandBuffer>(vkraii::CommandBuffer(device.device, buffers));
 };
 
 CommandQueue::SubmitKey VulkanCommandQueue::submit(CommandBuffer &commandBuffer) {
 	auto &cmdBuf = static_cast<VulkanCommandBuffer &>(commandBuffer);
 	cmdBuf.end();
 	vk::CommandBuffer vk = cmdBuf.commandBuffer;
-	queue.submit(vk::SubmitInfo(0, nullptr, nullptr, 1, &vk), nullptr);
+	vk::SubmitInfo	  submitInfo(0, nullptr, nullptr, 1, &vk);
+	vkQueueSubmit(queue, 1, vkc(&submitInfo)(), nullptr);
+
 	return 0;	  // TODO: fix this
 }
 
 void VulkanCommandQueue::wait(SubmitKey key) {
 	static_cast<void>(key);		// TODO: fix this
-	queue.waitIdle();
+	vkQueueWaitIdle(queue);
 }
 
 static int __asd = []() {
