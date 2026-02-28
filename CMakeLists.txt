@@ -90,21 +90,6 @@ target_link_libraries(${PROJECT_NAME} PRIVATE glm)
 target_link_libraries(${PROJECT_NAME} PRIVATE msdf-atlas-gen)
 target_link_libraries(${PROJECT_NAME} PRIVATE freetype)
 
-add_custom_command(
-	OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/vk_convert.hpp
-	COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/gen_vk_convert.py
-			> ${CMAKE_CURRENT_BINARY_DIR}/vk_convert.hpp
-	DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/gen_vk_convert.py
-	WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-	COMMENT "Generating Vulkan conversion utilities..."
-)
-message(${CMAKE_CURRENT_BINARY_DIR}/vk_convert.hpp)
-target_compile_definitions(${PROJECT_NAME} PRIVATE
-	"VK_CONVERT_HEADER=\"${CMAKE_CURRENT_BINARY_DIR}/vk_convert.hpp\""
-)
-add_custom_target(generate_vk_convert DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/vk_convert.hpp)
-add_dependencies(${PROJECT_NAME} generate_vk_convert)
-
 set_target_properties(${PROJECT_NAME} PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ../
 )

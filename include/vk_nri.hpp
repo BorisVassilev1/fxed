@@ -12,7 +12,6 @@
 #include "nri.hpp"
 #include "vulkan/vulkan.hpp"
 #include "vk_my_raii.hpp"
-#include "vk_convert.hpp"
 #include "VkBootstrap.h"
 
 namespace nri {
@@ -242,7 +241,7 @@ class VulkanCommandBuffer : public CommandBuffer {
 	void begin() override {
 		if (!isRecording) {
 			vk::CommandBufferBeginInfo beginInfo;
-			vkBeginCommandBuffer(commandBuffer, vkc(&beginInfo)());
+			vkBeginCommandBuffer(commandBuffer, (VkCommandBufferBeginInfo *)&beginInfo);
 			isRecording = true;
 		}
 	}
@@ -277,10 +276,10 @@ class VulkanProgramBuilder : public ProgramBuilder {
 
 class VulkanProgram : virtual Program {
    protected:
-	VulkanNRI				&nri;
-	vkraii::Pipeline		 pipeline;
+	VulkanNRI			  &nri;
+	vkraii::Pipeline	   pipeline;
 	vkraii::PipelineLayout pipelineLayout;
-	vk::PipelineBindPoint	 bindPoint;
+	vk::PipelineBindPoint  bindPoint;
 
    public:
 	VulkanProgram(VulkanNRI &nri, vkraii::Pipeline &&ppln, vkraii::PipelineLayout &&layout,
@@ -334,12 +333,12 @@ class VulkanMemoryCache {
 
 class VulkanWindow : public Window {
 	vkraii::SurfaceKHR surface;
-	vkb::Swapchain		 swapChain;
-	VulkanCommandQueue	 presentQueue;
+	vkb::Swapchain	   swapChain;
+	VulkanCommandQueue presentQueue;
 
 	vkraii::Semaphore imageAvailableSemaphore;
 	vkraii::Semaphore renderFinishedSemaphore;
-	vkraii::Fence		inFlightFence;
+	vkraii::Fence	  inFlightFence;
 
 	std::vector<ImageAndView<VulkanImage2D, VulkanRenderTarget>> swapChainImages;
 
@@ -367,7 +366,7 @@ class VulkanWindow : public Window {
 
 	const vkraii::SurfaceKHR									 &getSurface() { return surface; }
 	void														  setSurface(vkraii::SurfaceKHR &&surf);
-	vkb::Swapchain										 &getSwapChain() { return swapChain; }
+	vkb::Swapchain												 &getSwapChain() { return swapChain; }
 	vkraii::Queue												 &getPresentQueue() { return presentQueue.queue; }
 	std::vector<ImageAndView<VulkanImage2D, VulkanRenderTarget>> &getSwapChainImages() { return swapChainImages; }
 
@@ -375,11 +374,11 @@ class VulkanWindow : public Window {
 };
 
 class VulkanNRI : public NRI {
-	vkb::Instance		instance;
-	vkb::PhysicalDevice physicalDevice;
-	vkb::Device			device;
+	vkb::Instance			   instance;
+	vkb::PhysicalDevice		   physicalDevice;
+	vkb::Device				   device;
 	vkb::InstanceDispatchTable inst_disp;
-	vkb::DispatchTable		 disp;
+	vkb::DispatchTable		   disp;
 
 	VulkanCommandPool						 defaultCommandPool;
 	std::optional<VulkanDescriptorAllocator> descriptorAllocator;

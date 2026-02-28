@@ -358,7 +358,7 @@ VulkanDescriptorAllocator::VulkanDescriptorAllocator(VulkanNRI &nri)
 										  poolSizes.size(), poolSizes.data());
 
 	vk::DescriptorPool descriptorPool;
-	vkCreateDescriptorPool(&*nri.getDevice(), &*poolInfo, nullptr, vkc(&descriptorPool)());
+	vkCreateDescriptorPool(&*nri.getDevice(), &*poolInfo, nullptr, (VkDescriptorPool *)&descriptorPool);
 	pool = vkraii::DescriptorPool(nri.getDevice().device, descriptorPool);
 
 	std::array<vk::DescriptorSetLayoutBinding, 4> samplerBindings = {
@@ -383,12 +383,13 @@ VulkanDescriptorAllocator::VulkanDescriptorAllocator(VulkanNRI &nri)
 	layoutInfo.pNext = &bindingFlagsInfo;
 
 	vk::DescriptorSetLayout descriptorSetLayout;
-	vkCreateDescriptorSetLayout(&*nri.getDevice(), &*layoutInfo, nullptr, vkc(&descriptorSetLayout)());
+	vkCreateDescriptorSetLayout(&*nri.getDevice(), &*layoutInfo, nullptr,
+								(VkDescriptorSetLayout *)&descriptorSetLayout);
 	this->descriptorSetLayout = vkraii::DescriptorSetLayout(nri.getDevice().device, descriptorSetLayout);
 
 	vk::DescriptorSetAllocateInfo allocInfo(pool, 1, &descriptorSetLayout);
 	vk::DescriptorSet			  descriptorSet;
-	vkAllocateDescriptorSets(&*nri.getDevice(), &*allocInfo, vkc(&descriptorSet)());
+	vkAllocateDescriptorSets(&*nri.getDevice(), &*allocInfo, (VkDescriptorSet *)&descriptorSet);
 	bigDescriptorSet = vkraii::DescriptorSet(nri.getDevice().device, pool, descriptorSet);
 }
 
@@ -477,7 +478,7 @@ VulkanAllocation::VulkanAllocation(VulkanNRI &nri, MemoryRequirements memoryRequ
 	vk::MemoryAllocateInfo		allocInfo(memoryRequirements.size, memoryTypeIndex, &allocFlagsInfo);
 
 	vk::DeviceMemory allocatedMemory;
-	vkAllocateMemory(nri.getDevice(), &*allocInfo, nullptr, vkc(&allocatedMemory)());
+	vkAllocateMemory(nri.getDevice(), &*allocInfo, nullptr, (VkDeviceMemory *)&allocatedMemory);
 	memory = vkraii::DeviceMemory(nri.getDevice().device, allocatedMemory);
 }
 
@@ -523,7 +524,7 @@ VulkanBuffer::VulkanBuffer(VulkanNRI &nri, std::size_t size, BufferUsage usage)
 	vk::BufferCreateInfo bufferInfo({}, size, bufferUsageFlags, vk::SharingMode::eExclusive);
 
 	vk::Buffer createdBuffer;
-	vkCreateBuffer(nri.getDevice(), &*bufferInfo, nullptr, vkc(&createdBuffer)());
+	vkCreateBuffer(nri.getDevice(), &*bufferInfo, nullptr, (VkBuffer *)&createdBuffer);
 	buffer = vkraii::Buffer(nri.getDevice().device, createdBuffer);
 }
 
@@ -578,14 +579,14 @@ void VulkanBuffer::copyFrom(CommandBuffer &commandBuffer, Buffer &srcBuffer, std
 	//									   vk::PipelineStageFlagBits::eTransfer, {}, {}, {bufferBarrier}, {});
 
 	vk::BufferCopy copyRegion(srcOffset, dstOffset, size);
-	vkCmdCopyBuffer(vkCmdBuf.commandBuffer, vkSrcBuf.buffer, this->buffer, 1, vkc(&copyRegion)());
+	vkCmdCopyBuffer(vkCmdBuf.commandBuffer, vkSrcBuf.buffer, this->buffer, 1, (VkBufferCopy *)&copyRegion);
 
 	vk::BufferMemoryBarrier bufferBarrier2(vk::AccessFlagBits::eTransferWrite, vk::AccessFlagBits::eMemoryRead,
 										   VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, this->buffer, dstOffset,
 										   size);
 
 	vkCmdPipelineBarrier(vkCmdBuf.commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, {},
-						 0, nullptr, 1, vkc(&bufferBarrier2)(), 0, nullptr);
+						 0, nullptr, 1, (VkBufferMemoryBarrier *)&bufferBarrier2, 0, nullptr);
 }
 
 void VulkanBuffer::bindAsVertexBuffer(CommandBuffer &commandBuffer, uint32_t binding, std::size_t offset,
@@ -593,8 +594,7 @@ void VulkanBuffer::bindAsVertexBuffer(CommandBuffer &commandBuffer, uint32_t bin
 	auto &vkCmdBuf = static_cast<VulkanCommandBuffer &>(commandBuffer);
 	static_cast<void>(stride);
 
-	// vkCmdBuf.commandBuffer.bindVertexBuffers(binding, vkBuffer, vk::DeviceSize(offset));
-	vkCmdBindVertexBuffers(vkCmdBuf.commandBuffer, binding, 1, vkc(&*buffer)(), &offset);
+	vkCmdBindVertexBuffers(vkCmdBuf.commandBuffer, binding, 1, (VkBuffer *)&buffer, (VkDeviceSize *)&offset);
 }
 
 vk::IndexType nriIndexType2vkIndexType[] = {
@@ -627,7 +627,7 @@ VulkanRenderTarget::VulkanRenderTarget(VulkanNRI &nri, VulkanImage2D &image2D)
 							 vk::ComponentSwizzle::eIdentity, vk::ComponentSwizzle::eIdentity),
 		vk::ImageSubresourceRange(image2D.getAspectFlags(), 0, 1, 0, 1));
 	vk::ImageView createdImageView;
-	vkCreateImageView(nri.getDevice(), &*imageViewInfo, nullptr, vkc(&createdImageView)());
+	vkCreateImageView(nri.getDevice(), &*imageViewInfo, nullptr, (VkImageView *)&createdImageView);
 	imageView = vkraii::ImageView(nri.getDevice().device, createdImageView);
 }
 
@@ -644,7 +644,7 @@ VulkanTexture2D::VulkanTexture2D(VulkanNRI &nri, VulkanImage2D &image2D)
 							 vk::ComponentSwizzle::eIdentity, vk::ComponentSwizzle::eIdentity),
 		vk::ImageSubresourceRange(image2D.getAspectFlags(), 0, 1, 0, 1));
 	vk::ImageView createdImageView;
-	vkCreateImageView(nri.getDevice(), &*imageViewInfo, nullptr, vkc(&createdImageView)());
+	vkCreateImageView(nri.getDevice(), &*imageViewInfo, nullptr, (VkImageView *)&createdImageView);
 	imageView = vkraii::ImageView(nri.getDevice().device, createdImageView);
 
 	vk::SamplerCreateInfo samplerInfo({}, vk::Filter::eNearest, vk::Filter::eNearest, vk::SamplerMipmapMode::eNearest,
@@ -653,7 +653,7 @@ VulkanTexture2D::VulkanTexture2D(VulkanNRI &nri, VulkanImage2D &image2D)
 									  vk::CompareOp::eAlways, 0.0f, 0.0f, vk::BorderColor::eFloatTransparentBlack,
 									  VK_FALSE);
 	vk::Sampler			  createdSampler;
-	vkCreateSampler(nri.getDevice(), &*samplerInfo, nullptr, vkc(&createdSampler)());
+	vkCreateSampler(nri.getDevice(), &*samplerInfo, nullptr, (VkSampler *)&createdSampler);
 	sampler = vkraii::Sampler(nri.getDevice().device, createdSampler);
 }
 
@@ -669,7 +669,7 @@ VulkanStorageImage2D::VulkanStorageImage2D(VulkanNRI &nri, VulkanImage2D &image2
 							 vk::ComponentSwizzle::eIdentity, vk::ComponentSwizzle::eIdentity),
 		vk::ImageSubresourceRange(image2D.getAspectFlags(), 0, 1, 0, 1));
 	vk::ImageView createdImageView;
-	vkCreateImageView(nri.getDevice(), &*imageViewInfo, nullptr, vkc(&createdImageView)());
+	vkCreateImageView(nri.getDevice(), &*imageViewInfo, nullptr, (VkImageView *)&createdImageView);
 	imageView = vkraii::ImageView(nri.getDevice().device, createdImageView);
 }
 
@@ -723,7 +723,7 @@ void VulkanImage2D::clear(CommandBuffer &commandBuffer, glm::vec4 color) {
 
 	vk::ImageSubresourceRange range(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1);
 	vkCmdClearColorImage(vkBuf.commandBuffer, image.get(), (VkImageLayout)vk::ImageLayout::eTransferDstOptimal,
-						 (VkClearColorValue *)&v, 1, vkc(&range)());
+						 (VkClearColorValue *)&v, 1, (VkImageSubresourceRange *)&range);
 }
 
 void VulkanImage2D::prepareForPresent(CommandBuffer &commandBuffer) {
@@ -768,7 +768,7 @@ void VulkanImage2D::copyFrom(CommandBuffer &commandBuffer, Buffer &srcBuffer, st
 	vk::BufferImageCopy region(srcOffset, srcRowPitch, 0, vk::ImageSubresourceLayers(aspectFlags, 0, 0, 1),
 							   vk::Offset3D(0, 0, 0), vk::Extent3D(width, height, 1));
 	vkCmdCopyBufferToImage(vkCmdBuf.commandBuffer, vkSrcBuf.getBuffer(), image.get(),
-						   (VkImageLayout)vk::ImageLayout::eTransferDstOptimal, 1, vkc(&region)());
+						   (VkImageLayout)vk::ImageLayout::eTransferDstOptimal, 1, (VkBufferImageCopy *)&region);
 }
 
 vk::ImageAspectFlags VulkanImage2D::getAspectFlags(vk::Format format) {
@@ -793,7 +793,7 @@ void VulkanImage2D::transitionLayout(CommandBuffer &commandBuffer, vk::ImageLayo
 								   vk::QueueFamilyIgnored, image.get(), {aspectFlags, 0, 1, 0, 1});
 	vkBuf.begin();
 	vkCmdPipelineBarrier(vkBuf.commandBuffer, (VkPipelineStageFlags)srcStage, (VkPipelineStageFlags)dstStage, 0, 0,
-						 nullptr, 0, nullptr, 1, vkc(&barrier)());
+						 nullptr, 0, nullptr, 1, (VkImageMemoryBarrier *)&barrier);
 }
 
 VulkanImage2D::VulkanImage2D(VulkanNRI &nri, uint32_t width, uint32_t height, Format format, ImageUsage usage)
@@ -819,7 +819,7 @@ VulkanImage2D::VulkanImage2D(VulkanNRI &nri, uint32_t width, uint32_t height, Fo
 								  vk::ImageLayout::eUndefined);
 
 	vk::Image img = nullptr;
-	vkCreateImage(nri.getDevice(), &*imageInfo, nullptr, vkc(&img)());
+	vkCreateImage(nri.getDevice(), &*imageInfo, nullptr, (VkImage *)&img);
 	this->image = vkraii::Image((vk::Device)*device, img);
 }
 
@@ -838,7 +838,7 @@ std::unique_ptr<CommandPool> VulkanNRI::createCommandPool() {
 									 queueFamilyIndices.graphicsFamily.value());
 
 	vk::CommandPool pool = nullptr;
-	vkCreateCommandPool(device, &*poolCI, nullptr, vkc(&pool)());
+	vkCreateCommandPool(device, &*poolCI, nullptr, (VkCommandPool *)&pool);
 
 	return std::make_unique<VulkanCommandPool>(vkraii::CommandPool(device.device, pool));
 }
@@ -849,7 +849,7 @@ std::unique_ptr<ProgramBuilder> VulkanNRI::createProgramBuilder() {
 
 std::unique_ptr<CommandQueue> VulkanNRI::createCommandQueue() {
 	vk::Queue queue = nullptr;
-	vkGetDeviceQueue(device, queueFamilyIndices.graphicsFamily.value(), 0, vkc(&queue)());
+	vkGetDeviceQueue(device, queueFamilyIndices.graphicsFamily.value(), 0, (VkQueue *)&queue);
 
 	return std::make_unique<VulkanCommandQueue>(vkraii::Queue(device.device, queue));
 };
@@ -864,15 +864,15 @@ VulkanWindow::VulkanWindow(VulkanNRI &nri)
 	  inFlightFence(nullptr) {
 	vk::Semaphore			semaphore = nullptr;
 	vk::SemaphoreCreateInfo semaphoreInfo;
-	vkCreateSemaphore(nri.getDevice(), vkc(&semaphoreInfo)(), nullptr, vkc(&semaphore)());
+	vkCreateSemaphore(nri.getDevice(), (VkSemaphoreCreateInfo *)&semaphoreInfo, nullptr, (VkSemaphore *)&semaphore);
 	imageAvailableSemaphore = vkraii::Semaphore(nri.getDevice().device, semaphore);
 
-	vkCreateSemaphore(nri.getDevice(), vkc(&semaphoreInfo)(), nullptr, vkc(&semaphore)());
+	vkCreateSemaphore(nri.getDevice(), (VkSemaphoreCreateInfo *)&semaphoreInfo, nullptr, (VkSemaphore *)&semaphore);
 	renderFinishedSemaphore = vkraii::Semaphore(nri.getDevice().device, semaphore);
 
 	vk::FenceCreateInfo fenceInfo(vk::FenceCreateFlagBits::eSignaled);
 	vk::Fence			fence = nullptr;
-	vkCreateFence(nri.getDevice(), vkc(&fenceInfo)(), nullptr, vkc(&fence)());
+	vkCreateFence(nri.getDevice(), (VkFenceCreateInfo *)&fenceInfo, nullptr, (VkFence *)&fence);
 	inFlightFence = vkraii::Fence(nri.getDevice().device, fence);
 
 	if (imageAvailableSemaphore == nullptr || renderFinishedSemaphore == nullptr || inFlightFence == nullptr) {
@@ -1055,14 +1055,14 @@ void VulkanWindow::beginRendering(CommandBuffer &cmdBuf, const ImageAndViewRef &
 	renderingInfo.pColorAttachments	   = &colorAttachment;
 	renderingInfo.layerCount		   = 1;
 
-	vknri.getDispatchTable().cmdBeginRenderingKHR(vkCmdBuf.commandBuffer, vkc(&renderingInfo)());
+	vknri.getDispatchTable().cmdBeginRenderingKHR(vkCmdBuf.commandBuffer, (VkRenderingInfo *)&renderingInfo);
 
 	vk::Viewport viewport(0.0f, 0.0f, static_cast<float>(img.getWidth()), static_cast<float>(img.getHeight()), 0.0f,
 						  1.0f);
-	vkCmdSetViewport(vkCmdBuf.commandBuffer, 0, 1, vkc(&viewport)());
+	vkCmdSetViewport(vkCmdBuf.commandBuffer, 0, 1, (VkViewport *)&viewport);
 
 	vk::Rect2D rect({0, 0}, {img.getWidth(), img.getHeight()});
-	vkCmdSetScissor(vkCmdBuf.commandBuffer, 0, 1, vkc(&rect)());
+	vkCmdSetScissor(vkCmdBuf.commandBuffer, 0, 1, (VkRect2D *)&rect);
 }
 
 void VulkanWindow::endRendering(CommandBuffer &cmdBuf) {
@@ -1198,7 +1198,7 @@ std::pair<std::vector<vkraii::ShaderModule>, std::vector<vk::PipelineShaderStage
 #endif
 
 		vk::ShaderModule shaderModule = nullptr;
-		vkCreateShaderModule(device, &*shaderModuleInfo, nullptr, vkc(&shaderModule)());
+		vkCreateShaderModule(device, &*shaderModuleInfo, nullptr, (VkShaderModule *)&shaderModule);
 		shaderModules.push_back(vkraii::ShaderModule(device.device, shaderModule));
 
 		vk::PipelineShaderStageCreateInfo shaderStageInfo({}, stage, *shaderModules.back(),
@@ -1233,7 +1233,7 @@ std::unique_ptr<GraphicsProgram> VulkanProgramBuilder::buildGraphicsProgram() {
 	pipelineLayoutInfo.setSetLayoutCount(1);
 	pipelineLayoutInfo.setPSetLayouts(&*nri.getDescriptorAllocator().getDescriptorSetLayout());
 	vk::PipelineLayout pipelineLayout = nullptr;
-	vkCreatePipelineLayout(nri.getDevice(), &*pipelineLayoutInfo, nullptr, vkc(&pipelineLayout)());
+	vkCreatePipelineLayout(nri.getDevice(), &*pipelineLayoutInfo, nullptr, (VkPipelineLayout *)&pipelineLayout);
 
 	std::vector<vk::VertexInputBindingDescription>	 bindingDescriptions;
 	std::vector<vk::VertexInputAttributeDescription> attributeDescriptions;
@@ -1292,7 +1292,7 @@ std::unique_ptr<GraphicsProgram> VulkanProgramBuilder::buildGraphicsProgram() {
 		&pipelineRenderingInfo);
 
 	vk::Pipeline pipeline = nullptr;
-	vkCreateGraphicsPipelines(nri.getDevice(), nullptr, 1, &*pipelineInfo, nullptr, vkc(&pipeline)());
+	vkCreateGraphicsPipelines(nri.getDevice(), nullptr, 1, &*pipelineInfo, nullptr, (VkPipeline *)&pipeline);
 
 	return std::make_unique<VulkanGraphicsProgram>(nri, vkraii::Pipeline(nri.getDevice().device, pipeline),
 												   vkraii::PipelineLayout(nri.getDevice().device, pipelineLayout));
@@ -1304,12 +1304,12 @@ std::unique_ptr<ComputeProgram> VulkanProgramBuilder::buildComputeProgram() {
 
 	vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};
 	vk::PipelineLayout			 pipelineLayout = nullptr;
-	vkCreatePipelineLayout(nri.getDevice(), &*pipelineLayoutInfo, nullptr, vkc(&pipelineLayout)());
+	vkCreatePipelineLayout(nri.getDevice(), &*pipelineLayoutInfo, nullptr, (VkPipelineLayout *)&pipelineLayout);
 
 	vk::ComputePipelineCreateInfo pipelineInfo({}, shaderStages[0], pipelineLayout);
 
 	vk::Pipeline pipeline = nullptr;
-	vkCreateComputePipelines(nri.getDevice(), nullptr, 1, &*pipelineInfo, nullptr, vkc(&pipeline)());
+	vkCreateComputePipelines(nri.getDevice(), nullptr, 1, &*pipelineInfo, nullptr, (VkPipeline *)&pipeline);
 	return std::make_unique<VulkanComputeProgram>(nri, vkraii::Pipeline(nri.getDevice().device, pipeline),
 												  vkraii::PipelineLayout(nri.getDevice().device, pipelineLayout));
 }
@@ -1327,7 +1327,7 @@ void VulkanProgram::bind(CommandBuffer &commandBuffer) {
 
 	auto &descriptorSet = static_cast<VulkanNRI &>(nri).getDescriptorAllocator().getDescriptorSet();
 	vkCmdBindDescriptorSets(vkCmdBuf.commandBuffer, (VkPipelineBindPoint)bindPoint, *pipelineLayout, 0, 1,
-							vkc(&*descriptorSet)(), 0, nullptr);
+							(VkDescriptorSet *)&descriptorSet, 0, nullptr);
 }
 
 void VulkanProgram::unbind(CommandBuffer &commandBuffer) {
@@ -1411,7 +1411,7 @@ std::unique_ptr<Window> VulkanNRI::createGLFWWindow(GLFWwindow *glfwWindow) {
 	window->createSwapChain(width, height);
 
 	vk::Queue presentQueue;
-	vkGetDeviceQueue(device, queueFamilyIndices.graphicsFamily.value(), 0, vkc(&presentQueue)());
+	vkGetDeviceQueue(device, queueFamilyIndices.graphicsFamily.value(), 0, (VkQueue *)&presentQueue);
 	window->getPresentQueue() = vkraii::Queue(device.device, presentQueue);
 
 	return window;
@@ -1425,7 +1425,7 @@ std::unique_ptr<CommandBuffer> VulkanNRI::createCommandBuffer(const CommandPool 
 	vk::CommandBufferAllocateInfo allocInfo(static_cast<const VulkanCommandPool &>(pool).commandPool,
 											vk::CommandBufferLevel::ePrimary, 1);
 	vk::CommandBuffer			  buffers;
-	vkAllocateCommandBuffers(device, &*allocInfo, vkc(&buffers)());
+	vkAllocateCommandBuffers(device, &*allocInfo, (VkCommandBuffer *)&buffers);
 	return std::make_unique<VulkanCommandBuffer>(vkraii::CommandBuffer(device.device, buffers));
 };
 
@@ -1434,7 +1434,7 @@ CommandQueue::SubmitKey VulkanCommandQueue::submit(CommandBuffer &commandBuffer)
 	cmdBuf.end();
 	vk::CommandBuffer vk = cmdBuf.commandBuffer;
 	vk::SubmitInfo	  submitInfo(0, nullptr, nullptr, 1, &vk);
-	vkQueueSubmit(queue, 1, vkc(&submitInfo)(), nullptr);
+	vkQueueSubmit(queue, 1, (VkSubmitInfo *)&submitInfo, nullptr);
 
 	return 0;	  // TODO: fix this
 }
