@@ -6,6 +6,7 @@
 
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_raii.hpp>
+#include "vulkan/vulkan.hpp"
 #include <vulkan/vulkan_core.h>
 #ifdef _WIN32
 	#include <wrl.h>
@@ -26,7 +27,7 @@
 namespace nri {
 static const std::vector<const char *> validationLayers = {
 #ifndef NDEBUG
-	"VK_LAYER_KHRONOS_validation"
+//"VK_LAYER_KHRONOS_validation"
 #endif
 };
 
@@ -306,6 +307,7 @@ void VulkanNRI::createInstance() {
 
 	if (enableValidationLayers) {
 		if (checkValidationLayerSupport()) {
+			dbLog(dbg::LOG_INFO, "Validation layers are available and will be enabled.");
 			createInfo.enabledLayerCount   = static_cast<uint32_t>(validationLayers.size());
 			createInfo.ppEnabledLayerNames = validationLayers.data();
 		} else {
@@ -349,29 +351,59 @@ void VulkanNRI::createLogicalDevice() {
 	vk::DeviceQueueCreateInfo queueCreateInfo({}, indices.graphicsFamily.value(), 1, &prio);
 
 	// check device features support
+	vk::PhysicalDeviceFeatures2				   physicalDeviceFeatures2{};
+	vk::PhysicalDeviceVulkan12Features		   vulkan12Features{};
+	vk::PhysicalDeviceDynamicRenderingFeatures dynamicRenderingFeatures{};
+	physicalDeviceFeatures2.pNext = &vulkan12Features;
+	vulkan12Features.pNext		  = &dynamicRenderingFeatures;
+
+	vkGetPhysicalDeviceFeatures2(*physicalDevice, &*physicalDeviceFeatures2);
+
+	if (!vulkan12Features.bufferDeviceAddress) {
+		dbLog(dbg::LOG_ERROR,
+			  "Device does not support buffer device address feature, which is required by this application.");
+	}
+	if (!vulkan12Features.descriptorBindingUniformBufferUpdateAfterBind ||
+		!vulkan12Features.descriptorBindingStorageBufferUpdateAfterBind ||
+		!vulkan12Features.descriptorBindingSampledImageUpdateAfterBind ||
+		!vulkan12Features.descriptorBindingStorageImageUpdateAfterBind) {
+		dbLog(dbg::LOG_ERROR,
+			  "Device does not support required update after bind features, which are required by this application.");
+	}
+	if (!vulkan12Features.shaderSampledImageArrayNonUniformIndexing ||
+		!vulkan12Features.shaderStorageBufferArrayNonUniformIndexing ||
+		!vulkan12Features.shaderStorageImageArrayNonUniformIndexing) {
+		dbLog(
+			dbg::LOG_ERROR,
+			"Device does not support required non-uniform indexing features, which are required by this application.");
+	}
+	if (!dynamicRenderingFeatures.dynamicRendering) {
+		dbLog(dbg::LOG_ERROR,
+			  "Device does not support dynamic rendering feature, which is required by this application.");
+	}
 
 	vk::PhysicalDeviceFeatures					 deviceFeatures{};
 	vk::PhysicalDeviceDescriptorIndexingFeatures descriptorIndexingFeatures(
 		VK_FALSE,	  // shaderInputAttachmentArrayDynamicIndexing
-		VK_TRUE,	  // shaderUniformTexelBufferArrayDynamicIndexing
-		VK_TRUE,	  // shaderStorageTexelBufferArrayDynamicIndexing
+		VK_FALSE,	  // shaderUniformTexelBufferArrayDynamicIndexing
+		VK_FALSE,	  // shaderStorageTexelBufferArrayDynamicIndexing
 		VK_TRUE,	  // shaderUniformBufferArrayNonUniformIndexing
 		VK_TRUE,	  // shaderStorageBufferArrayNonUniformIndexing
 		VK_TRUE,	  // shaderSampledImageArrayNonUniformIndexing
 		VK_TRUE,	  // shaderStorageImageArrayNonUniformIndexing
 		VK_FALSE,	  // shaderInputAttachmentArrayNonUniformIndexing
-		VK_TRUE,	  // shaderUniformTexelBufferArrayNonUniformIndexing
-		VK_TRUE,	  // shaderStorageTexelBufferArrayNonUniformIndexing
+		VK_FALSE,	  // shaderUniformTexelBufferArrayNonUniformIndexing
+		VK_FALSE,	  // shaderStorageTexelBufferArrayNonUniformIndexing
 		VK_TRUE,	  // descriptorBindingUniformBufferUpdateAfterBind
 		VK_TRUE,	  // descriptorBindingStorageBufferUpdateAfterBind
 		VK_TRUE,	  // descriptorBindingSampledImageUpdateAfterBind
 		VK_TRUE,	  // descriptorBindingStorageImageUpdateAfterBind
-		VK_TRUE,	  // descriptorBindingStorageTexelBufferUpdateAfterBind
-		VK_TRUE,	  // descriptorBindingUniformTexelBufferUpdateAfterBind
-		VK_TRUE,	  // descriptorBindingUpdateUnusedWhilePending
-		VK_TRUE,	  // descriptorBindingPartiallyBound
-		VK_TRUE,	  // descriptorBindingVariableDescriptorCount
-		VK_TRUE,	  // runtimeDescriptorArray
+		VK_FALSE,	  // descriptorBindingStorageTexelBufferUpdateAfterBind
+		VK_FALSE,	  // descriptorBindingUniformTexelBufferUpdateAfterBind
+		VK_FALSE,	  // descriptorBindingUpdateUnusedWhilePending
+		VK_FALSE,	  // descriptorBindingPartiallyBound
+		VK_FALSE,	  // descriptorBindingVariableDescriptorCount
+		VK_FALSE,	  // runtimeDescriptorArray
 		nullptr);
 	vk::PhysicalDeviceDynamicRenderingFeatures	  dynamicRenderingFeature(VK_TRUE, &descriptorIndexingFeatures);
 	vk::PhysicalDeviceBufferDeviceAddressFeatures bufferDeviceAddressFeature(VK_TRUE, VK_FALSE, VK_FALSE,
