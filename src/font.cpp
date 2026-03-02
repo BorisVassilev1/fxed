@@ -322,7 +322,7 @@ void FontAtlas::uploadAtlasToGPU() {
 	nri::CommandPool &commandPool	= nri.getDefaultCommandPool();
 	auto			  commandBuffer = nri.createCommandBuffer(commandPool);
 	commandBuffer->begin();
-	image->prepareForStorage(*commandBuffer);
+	image->prepareForTransferDst(*commandBuffer);
 	image->copyFrom(*commandBuffer, *uploadBuffer, 0, data->atlasStorage.getStride() / sizeof(float) / 4);
 	image->prepareForTexture(*commandBuffer);
 	commandBuffer->end();

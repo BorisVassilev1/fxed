@@ -200,6 +200,8 @@ class VulkanImage2D : public Image2D {
 	void prepareForPresent(CommandBuffer &commandBuffer) override;
 	void prepareForStorage(CommandBuffer &commandBuffer) override;
 	void prepareForTexture(CommandBuffer &commandBuffer) override;
+	void prepareForTransferDst(CommandBuffer &commandBuffer) override;
+	void prepareForTransferSrc(CommandBuffer &commandBuffer) override;
 	void copyFrom(CommandBuffer &commandBuffer, Buffer &srcBuffer, std::size_t srcOffset,
 				  uint32_t srcRowPitch) override;
 

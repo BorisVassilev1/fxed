@@ -396,6 +396,8 @@ class Image2D {
 	virtual void prepareForPresent(CommandBuffer &commandBuffer)	  = 0;
 	virtual void prepareForStorage(CommandBuffer &commandBuffer)	  = 0;
 	virtual void prepareForTexture(CommandBuffer &commandBuffer)	  = 0;
+	virtual void prepareForTransferDst(CommandBuffer &commandBuffer)	  = 0;
+	virtual void prepareForTransferSrc(CommandBuffer &commandBuffer)	  = 0;
 
 	virtual void copyFrom(CommandBuffer &commandBuffer, Buffer &srcBuffer, std::size_t srcOffset,
 						  uint32_t srcRowPitch) = 0;

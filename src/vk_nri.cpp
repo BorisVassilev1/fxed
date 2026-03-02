@@ -733,7 +733,7 @@ void VulkanImage2D::prepareForPresent(CommandBuffer &commandBuffer) {
 
 	transitionLayout(vkBuf, vk::ImageLayout::ePresentSrcKHR,
 					 vk::AccessFlagBits::eTransferWrite | vk::AccessFlagBits::eColorAttachmentWrite,
-					 vk::AccessFlagBits::eMemoryRead,
+					 vk::AccessFlagBits::eNone,
 					 vk::PipelineStageFlagBits::eTransfer | vk::PipelineStageFlagBits::eColorAttachmentOutput,
 					 vk::PipelineStageFlagBits::eBottomOfPipe);
 }
@@ -757,6 +757,21 @@ void VulkanImage2D::prepareForTexture(CommandBuffer &commandBuffer) {
 					 vk::PipelineStageFlagBits::eTransfer | vk::PipelineStageFlagBits::eColorAttachmentOutput,
 					 vk::PipelineStageFlagBits::eFragmentShader | vk::PipelineStageFlagBits::eVertexShader |
 						 vk::PipelineStageFlagBits::eComputeShader);
+}
+
+void VulkanImage2D::prepareForTransferDst(CommandBuffer &commandBuffer) {
+	auto &vkBuf = static_cast<VulkanCommandBuffer &>(commandBuffer);
+
+	transitionLayout(vkBuf, vk::ImageLayout::eTransferDstOptimal, vk::AccessFlagBits::eNone,
+					 vk::AccessFlagBits::eTransferWrite, vk::PipelineStageFlagBits::eTopOfPipe,
+					 vk::PipelineStageFlagBits::eTransfer);
+}
+void VulkanImage2D::prepareForTransferSrc(CommandBuffer &commandBuffer) {
+	auto &vkBuf = static_cast<VulkanCommandBuffer &>(commandBuffer);
+
+	transitionLayout(vkBuf, vk::ImageLayout::eTransferSrcOptimal, vk::AccessFlagBits::eNone,
+					 vk::AccessFlagBits::eTransferRead, vk::PipelineStageFlagBits::eTopOfPipe,
+					 vk::PipelineStageFlagBits::eTransfer);
 }
 
 void VulkanImage2D::copyFrom(CommandBuffer &commandBuffer, Buffer &srcBuffer, std::size_t srcOffset,
@@ -811,6 +826,7 @@ void VulkanImage2D::transitionLayout(CommandBuffer &commandBuffer, vk::ImageLayo
 	vkBuf.begin();
 	vkCmdPipelineBarrier(vkBuf.commandBuffer, (VkPipelineStageFlags)srcStage, (VkPipelineStageFlags)dstStage, 0, 0,
 						 nullptr, 0, nullptr, 1, (VkImageMemoryBarrier *)&barrier);
+	layout = newLayout;
 }
 
 VulkanImage2D::VulkanImage2D(VulkanNRI &nri, uint32_t width, uint32_t height, Format format, ImageUsage usage)
@@ -986,7 +1002,7 @@ void VulkanWindow::createSwapChain(uint32_t &width, uint32_t &height) {
 
 		this->swapChainImages.emplace_back(std::move(nriImage), std::move(renderTarget));
 		this->swapChainImages.back().image.transitionLayout(
-			*commandBuffer, vk::ImageLayout::ePresentSrcKHR, vk::AccessFlagBits::eNone, vk::AccessFlagBits::eMemoryRead,
+			*commandBuffer, vk::ImageLayout::ePresentSrcKHR, vk::AccessFlagBits::eNone, vk::AccessFlagBits::eNone,
 			vk::PipelineStageFlagBits::eTopOfPipe, vk::PipelineStageFlagBits::eBottomOfPipe);
 	}
 }
@@ -1008,7 +1024,7 @@ void VulkanWindow::beginFrame() {
 	this->currentImageIndex = imageIndex;
 
 	swapChainImages[imageIndex].image.transitionLayout(
-		*commandBuffer, vk::ImageLayout::eColorAttachmentOptimal, vk::AccessFlagBits::eMemoryRead,
+		*commandBuffer, vk::ImageLayout::eColorAttachmentOptimal, vk::AccessFlagBits::eNone,
 		vk::AccessFlagBits::eColorAttachmentWrite, vk::PipelineStageFlagBits::eBottomOfPipe,
 		vk::PipelineStageFlagBits::eColorAttachmentOutput);
 }
