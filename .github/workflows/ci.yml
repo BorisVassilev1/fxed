@@ -76,7 +76,7 @@ jobs:
         run: |
           chmod +x configure.sh
           # Modify configure.sh to use the build_type from matrix
-          sed "s/-DCMAKE_BUILD_TYPE=Release/-DCMAKE_BUILD_TYPE=${{ matrix.build_type }}/g" configure.sh > configure_ci.sh
+          sed "s/-DCMAKE_BUILD_TYPE=Debug/-DCMAKE_BUILD_TYPE=${{ matrix.build_type }}/g" configure.sh > configure_ci.sh
           chmod +x configure_ci.sh
           ./configure_ci.sh
         shell: bash

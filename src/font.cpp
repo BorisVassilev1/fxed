@@ -38,6 +38,11 @@ class ImageAtlasStorage {
 
 	~ImageAtlasStorage() { unmap(); }
 
+	void remap() {
+		unmap();
+		data = uploadBuffer->map(0, uploadBuffer->getSize());
+	}
+
 	void unmap() {
 		if (data) {
 			if (uploadBuffer) uploadBuffer->unmap();
@@ -312,12 +317,13 @@ void FontAtlas::syncWithGPU() {
 
 void FontAtlas::uploadAtlasToGPU() {
 	auto &uploadBuffer = data->atlasStorage.getUploadBuffer();
+	data->atlasStorage.remap();
 
 	nri::CommandPool &commandPool	= nri.getDefaultCommandPool();
 	auto			  commandBuffer = nri.createCommandBuffer(commandPool);
 	commandBuffer->begin();
 	image->prepareForStorage(*commandBuffer);
-	image->copyFrom(*commandBuffer, *uploadBuffer, 0, 0);
+	image->copyFrom(*commandBuffer, *uploadBuffer, 0, data->atlasStorage.getStride() / sizeof(float) / 4);
 	image->prepareForTexture(*commandBuffer);
 	commandBuffer->end();
 

@@ -7,6 +7,7 @@
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_core.h>
 
+#include "utils.hpp"
 #include "vk_my_raii.hpp"
 #include "vulkan/vulkan.hpp"
 
@@ -238,6 +239,7 @@ void VulkanNRI::pickPhysicalDevice() {
 	selector.require_present(true);
 	selector.defer_surface_initialization();
 	selector.allow_any_gpu_device_type(true);
+	selector.prefer_gpu_device_type(vkb::PreferredDeviceType::integrated);
 
 	auto physDevRet = selector.select();
 	if (!physDevRet) {
@@ -762,9 +764,24 @@ void VulkanImage2D::copyFrom(CommandBuffer &commandBuffer, Buffer &srcBuffer, st
 	auto &vkCmdBuf = static_cast<VulkanCommandBuffer &>(commandBuffer);
 	auto &vkSrcBuf = static_cast<VulkanBuffer &>(srcBuffer);
 	if (!vkCmdBuf.isRecording) vkCmdBuf.begin();
+
+	vk::BufferMemoryBarrier bufferBarrier(vk::AccessFlagBits::eHostWrite,		 // srcAccessMask
+										  vk::AccessFlagBits::eTransferRead,	 // dstAccessMask
+										  vk::QueueFamilyIgnored, vk::QueueFamilyIgnored, vkSrcBuf.getBuffer(), 0,
+										  VK_WHOLE_SIZE);
+
+	vkCmdPipelineBarrier(vkCmdBuf.commandBuffer,
+						 (VkPipelineStageFlags)vk::PipelineStageFlagBits::eHost,		 // srcStageMask
+						 (VkPipelineStageFlags)vk::PipelineStageFlagBits::eTransfer,	 // dstStageMask
+						 0, 0, nullptr, 1, (VkBufferMemoryBarrier *)&bufferBarrier, 0, nullptr);
+
 	transitionLayout(vkCmdBuf, vk::ImageLayout::eTransferDstOptimal, vk::AccessFlagBits::eNone,
 					 vk::AccessFlagBits::eTransferWrite, vk::PipelineStageFlagBits::eTopOfPipe,
 					 vk::PipelineStageFlagBits::eTransfer);
+
+	dbLog(dbg::LOG_DEBUG, "copying... aspectFlags: ", vk::to_string(aspectFlags), " format: ", vk::to_string(format),
+		  " rowPitch: ", srcRowPitch);
+
 	vk::BufferImageCopy region(srcOffset, srcRowPitch, 0, vk::ImageSubresourceLayers(aspectFlags, 0, 0, 1),
 							   vk::Offset3D(0, 0, 0), vk::Extent3D(width, height, 1));
 	vkCmdCopyBufferToImage(vkCmdBuf.commandBuffer, vkSrcBuf.getBuffer(), image.get(),
