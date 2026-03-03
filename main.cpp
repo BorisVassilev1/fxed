@@ -106,7 +106,7 @@ int main(int argc, char *argv[]) {
 
 	window.addResizeCallback(resizeCallback);
 
-	fxed::Keyboard::addKeyCallback([&](GLFWwindow *window, int key, int, int action, int mods) {
+	fxed::Keyboard::addKeyCallback([&](GLFWwindow *, int key, int, int action, int mods) {
 		// zoom with ctrl + +/-
 		if (action == GLFW_PRESS || action == GLFW_REPEAT) {
 			if (mods & GLFW_MOD_CONTROL) {
@@ -123,7 +123,8 @@ int main(int argc, char *argv[]) {
 	fxed::Mouse mouse(window);
 	fxed::Mouse::addScrollCallback([&](GLFWwindow *, double, double yOffset) {
 		if (fxed::Keyboard::getKey(GLFW_KEY_LEFT_CONTROL) || fxed::Keyboard::getKey(GLFW_KEY_RIGHT_CONTROL)) {
-			pushConstants.textSize += (float)yOffset;
+			pushConstants.textSize += std::copysign(1.f, yOffset) * 2.0f;
+			font.resize((uint32_t)pushConstants.textSize);
 		} else {
 			pushConstants.translation.y += std::copysign(1.f, yOffset) * 2.0f;
 		}
@@ -131,8 +132,13 @@ int main(int argc, char *argv[]) {
 
 	while (!window.shouldClose()) {
 		window.beginFrame();
+		bool res = win->beginFrame();
+		if (!res) {
+			window.swapBuffers();
+			// std::this_thread::sleep_for(std::chrono::milliseconds(100));
+			continue;
+		}
 
-		win->beginFrame();
 		auto &cmdBuf = win->getCurrentCommandBuffer();
 
 		shader->bind(cmdBuf);
@@ -143,8 +149,8 @@ int main(int argc, char *argv[]) {
 		std::u32string text = textEditor.getText();
 		glm::vec2	   cursorRealPos;
 		font.syncWithGPU();
-		cursorRealPos =
-			textMesh.updateText(std::span<const char32_t>{text.begin(), text.end()}, font, textEditor.getCursorPos());
+		cursorRealPos = textMesh.updateText(std::span<const char32_t>{text.begin(), text.end()}, font,
+											textEditor.getCursorPos(), window.getWidth());
 
 		glm::vec2 screenBounds = glm::vec2(pushConstants.viewportSize) / pushConstants.textSize;
 		// clamp translation to prevent moving text out of screen

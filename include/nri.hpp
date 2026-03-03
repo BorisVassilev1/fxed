@@ -396,8 +396,8 @@ class Image2D {
 	virtual void prepareForPresent(CommandBuffer &commandBuffer)	  = 0;
 	virtual void prepareForStorage(CommandBuffer &commandBuffer)	  = 0;
 	virtual void prepareForTexture(CommandBuffer &commandBuffer)	  = 0;
-	virtual void prepareForTransferDst(CommandBuffer &commandBuffer)	  = 0;
-	virtual void prepareForTransferSrc(CommandBuffer &commandBuffer)	  = 0;
+	virtual void prepareForTransferDst(CommandBuffer &commandBuffer)  = 0;
+	virtual void prepareForTransferSrc(CommandBuffer &commandBuffer)  = 0;
 
 	virtual void copyFrom(CommandBuffer &commandBuffer, Buffer &srcBuffer, std::size_t srcOffset,
 						  uint32_t srcRowPitch) = 0;
@@ -530,7 +530,7 @@ class Window {
 	virtual ~Window() {}
 	Window(NRI &nri) : nri(nri) {}
 
-	virtual void			beginFrame()			  = 0;
+	virtual bool			beginFrame()			  = 0;
 	virtual void			endFrame()				  = 0;
 	virtual ImageAndViewRef getCurrentRenderTarget()  = 0;
 	virtual CommandBuffer  &getCurrentCommandBuffer() = 0;

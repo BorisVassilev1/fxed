@@ -40,10 +40,10 @@ class FontAtlas {
 	FontFallbackChain				 fallbackChain;
 	nri::NRI						&nri;
 	nri::CommandQueue				&q;
-	uint32_t						 fontSize = 48;
-	bool atlasChanged = false;
+	uint32_t						 fontSize	  = 48;
+	bool							 atlasChanged = false;
 
-	int addGlyphToAtlas(uint32_t c);
+	int	 addGlyphToAtlas(uint32_t c);
 	void uploadAtlasToGPU();
 
    public:
@@ -64,8 +64,9 @@ class FontAtlas {
 			  uint32_t fontSize = 48);
 	~FontAtlas();
 
-	void resize(uint32_t newSize);
-	void syncWithGPU();
+	void	 resize(uint32_t newSize);
+	void	 syncWithGPU();
+	uint32_t getFontSize() const { return fontSize; }
 
 	auto getHandle() { return imageView->getHandle(); }
 

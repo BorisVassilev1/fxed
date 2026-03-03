@@ -358,7 +358,7 @@ class VulkanWindow : public Window {
 	~VulkanWindow();
 
 	void			createSwapChain(uint32_t &width, uint32_t &height);
-	void			beginFrame() override;
+	bool			beginFrame() override;
 	void			endFrame() override;
 	ImageAndViewRef getCurrentRenderTarget() override;
 	CommandBuffer  &getCurrentCommandBuffer() override;

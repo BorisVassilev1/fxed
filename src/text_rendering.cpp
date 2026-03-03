@@ -15,13 +15,19 @@ TextMesh::TextMesh(nri::NRI &nri, nri::CommandQueue &q, std::size_t maxCharCount
 	}
 }
 
-glm::vec2 TextMesh::updateText(std::span<const char32_t> text, fxed::FontAtlas &font, glm::ivec2 cursorPos) {
+glm::vec2 TextMesh::updateText(std::span<const char32_t> text, fxed::FontAtlas &font, glm::ivec2 cursorPos,
+							   float lineWidth) {
 	glm::vec2 cursorPosResult = cursorPos;
 	size_t	  offset		  = 0;
 	size_t	  indexCount	  = 0;
 	int		  advanceY		  = 0;
+	double	  advanceDY		  = 0.0;
 	int		  advanceX		  = 0;
-	double	  advance		  = 0.0;
+	double	  advanceDX		  = 0.0;
+
+	double lineWidthChars = lineWidth > 0 ? lineWidth / font.getFontSize() : 0;
+	double lineHeight	  = 1.0;
+	bool   cursorFound	  = false;
 
 	size_t j = 0;
 	for (size_t i = 0; i < text.size(); i++) {
@@ -30,22 +36,33 @@ glm::vec2 TextMesh::updateText(std::span<const char32_t> text, fxed::FontAtlas &
 			break;
 		}
 		if (text[i] == '\n') {
+			advanceDY += lineHeight;
+			advanceDX = 0.0;
 			advanceY += 1;
-			advance	 = 0.0;
 			advanceX = 0;
+
+			if (cursorPos.x >= advanceX && cursorPos.y >= advanceY) {
+				cursorFound		= true;
+				cursorPosResult = glm::vec2(advanceDX, advanceDY);
+			}
 			continue;
 		}
 
 		auto box = font.getGlyphBox(text[i]);
+		if (lineWidth > 0 && advanceDX + box.advance > lineWidthChars) {
+			advanceDY += lineHeight;
+			advanceDX = 0.0;
+		}
+
 		if (text[i] > 255 || !std::isspace(text[i])) {
-			vertexData[4 * j + 0].x = advance + box.bounds.l;
-			vertexData[4 * j + 0].y = advanceY - box.bounds.t;
-			vertexData[4 * j + 1].x = advance + box.bounds.l;
-			vertexData[4 * j + 1].y = advanceY - box.bounds.b;
-			vertexData[4 * j + 2].x = advance + box.bounds.r;
-			vertexData[4 * j + 2].y = advanceY - box.bounds.b;
-			vertexData[4 * j + 3].x = advance + box.bounds.r;
-			vertexData[4 * j + 3].y = advanceY - box.bounds.t;
+			vertexData[4 * j + 0].x = advanceDX + box.bounds.l;
+			vertexData[4 * j + 0].y = advanceDY - box.bounds.t;
+			vertexData[4 * j + 1].x = advanceDX + box.bounds.l;
+			vertexData[4 * j + 1].y = advanceDY - box.bounds.b;
+			vertexData[4 * j + 2].x = advanceDX + box.bounds.r;
+			vertexData[4 * j + 2].y = advanceDY - box.bounds.b;
+			vertexData[4 * j + 3].x = advanceDX + box.bounds.r;
+			vertexData[4 * j + 3].y = advanceDY - box.bounds.t;
 
 			indexData[6 * j + 0] = offset + 0;
 			indexData[6 * j + 1] = offset + 1;
@@ -68,9 +85,14 @@ glm::vec2 TextMesh::updateText(std::span<const char32_t> text, fxed::FontAtlas &
 		}
 
 		advanceX += 1;
-		advance += box.advance;
-		if (cursorPos.x == advanceX && cursorPos.y == advanceY) { cursorPosResult = glm::vec2(advance, advanceY); }
+		advanceDX += box.advance;
+		if (cursorPos.x >= advanceX && cursorPos.y >= advanceY) {
+			cursorFound		= true;
+			cursorPosResult = glm::vec2(advanceDX, advanceDY);
+		}
 	}
+
+	// if (!cursorFound) { cursorPosResult = glm::vec2(advanceDX, advanceDY); }
 
 	this->indexCount = static_cast<uint32_t>(indexCount);
 	return cursorPosResult;

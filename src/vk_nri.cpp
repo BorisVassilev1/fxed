@@ -794,9 +794,6 @@ void VulkanImage2D::copyFrom(CommandBuffer &commandBuffer, Buffer &srcBuffer, st
 					 vk::AccessFlagBits::eTransferWrite, vk::PipelineStageFlagBits::eTopOfPipe,
 					 vk::PipelineStageFlagBits::eTransfer);
 
-	dbLog(dbg::LOG_DEBUG, "copying... aspectFlags: ", vk::to_string(aspectFlags), " format: ", vk::to_string(format),
-		  " rowPitch: ", srcRowPitch);
-
 	vk::BufferImageCopy region(srcOffset, srcRowPitch, 0, vk::ImageSubresourceLayers(aspectFlags, 0, 0, 1),
 							   vk::Offset3D(0, 0, 0), vk::Extent3D(width, height, 1));
 	vkCmdCopyBufferToImage(vkCmdBuf.commandBuffer, vkSrcBuf.getBuffer(), image.get(),
@@ -958,17 +955,23 @@ void VulkanWindow::setSurface(vkraii::SurfaceKHR &&surface) {
 }
 
 void VulkanWindow::createSwapChain(uint32_t &width, uint32_t &height) {
-	dbLog(dbg::LOG_INFO, "Creating swapchain for window with size ", width, "x", height);
 	this->width	 = width;
 	this->height = height;
 	auto &nri	 = static_cast<VulkanNRI &>(this->nri);
 	if (this->surface == nullptr) { THROW_RUNTIME_ERR("surface is not set for VulkanWindow!"); }
 
 	vk::SurfaceCapabilitiesKHR capabilities;
-	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(nri.getPhysicalDevice(), *surface,
-											  (VkSurfaceCapabilitiesKHR *)&capabilities);
-	width  = std::clamp(width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
-	height = std::clamp(height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
+	VkResult				   res = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(nri.getPhysicalDevice(), *surface,
+																			   (VkSurfaceCapabilitiesKHR *)&capabilities);
+	if (res != VK_SUCCESS) {
+		if (swapChain) vkDestroySwapchainKHR(nri.getDevice(), swapChain, nullptr);
+		swapChain = vkb::Swapchain();
+		return;
+	}
+
+	width  = capabilities.maxImageExtent.width;
+	height = capabilities.maxImageExtent.height;
+	dbLog(dbg::LOG_INFO, "Creating swapchain for window with size ", width, "x", height);
 
 	vkb::SwapchainBuilder swapchainBuilder{nri.getPhysicalDevice(), nri.getDevice(), *surface};
 	swapchainBuilder.set_desired_present_mode((VkPresentModeKHR)vk::PresentModeKHR::eFifo);
@@ -976,14 +979,17 @@ void VulkanWindow::createSwapChain(uint32_t &width, uint32_t &height) {
 	swapchainBuilder.set_desired_extent(width, height);
 	swapchainBuilder.set_desired_min_image_count(capabilities.minImageCount + 1);
 	swapchainBuilder.set_required_min_image_count(capabilities.minImageCount);
-	swapchainBuilder.set_old_swapchain(swapChain);
+	if (swapChain != VK_NULL_HANDLE) swapchainBuilder.set_old_swapchain(swapChain);
 	swapchainBuilder.set_image_usage_flags(
 		VkImageUsageFlags(vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferDst));
 	swapchainBuilder.set_pre_transform_flags(VkSurfaceTransformFlagBitsKHR(vk::SurfaceTransformFlagBitsKHR::eIdentity));
 
 	auto swapchainResult = swapchainBuilder.build();
 	if (!swapchainResult.has_value()) {
-		THROW_RUNTIME_ERR(std::format("Failed to create swapchain: {}", swapchainResult.error().message()));
+		dbLog(dbg::LOG_ERROR, "Failed to create swapchain: ", swapchainResult.error().message());
+		if (swapChain) vkDestroySwapchainKHR(nri.getDevice(), swapChain, nullptr);
+		swapChain = vkb::Swapchain();
+		return;
 	}
 	swapChain = std::move(swapchainResult.value());
 
@@ -1007,16 +1013,20 @@ void VulkanWindow::createSwapChain(uint32_t &width, uint32_t &height) {
 	}
 }
 
-void VulkanWindow::beginFrame() {
+bool VulkanWindow::beginFrame() {
 	auto &nri = static_cast<const VulkanNRI &>(this->nri);
 
 	vk::Result result =
 		(vk::Result)vkWaitForFences(nri.getDevice(), 1, (VkFence *)&*inFlightFence, VK_TRUE, UINT64_MAX);
 	assert(result == vk::Result::eSuccess);
-	// nri.getDevice().resetFences({inFlightFence});
+
+	if (swapChain == nullptr) {
+		createSwapChain(width, height);
+		return false;
+	}
 	result = (vk::Result)vkResetFences(nri.getDevice(), 1, (VkFence *)&*inFlightFence);
 	assert(result == vk::Result::eSuccess);
-	// auto imageIndex			= swapChain.acquireNextImage(UINT64_MAX, *imageAvailableSemaphore, nullptr);
+
 	uint32_t imageIndex;
 	result = (vk::Result)vkAcquireNextImageKHR(nri.getDevice(), swapChain, UINT64_MAX, *imageAvailableSemaphore,
 											   nullptr, &imageIndex);
@@ -1027,6 +1037,7 @@ void VulkanWindow::beginFrame() {
 		*commandBuffer, vk::ImageLayout::eColorAttachmentOptimal, vk::AccessFlagBits::eNone,
 		vk::AccessFlagBits::eColorAttachmentWrite, vk::PipelineStageFlagBits::eBottomOfPipe,
 		vk::PipelineStageFlagBits::eColorAttachmentOutput);
+	return true;
 }
 
 ImageAndViewRef VulkanWindow::getCurrentRenderTarget() {
@@ -1036,6 +1047,11 @@ ImageAndViewRef VulkanWindow::getCurrentRenderTarget() {
 CommandBuffer &VulkanWindow::getCurrentCommandBuffer() { return *commandBuffer; }
 
 void VulkanWindow::endFrame() {
+	if (swapChain == nullptr) {
+		dbLog(dbg::LOG_ERROR, "Swapchain is null in VulkanWindow::endFrame! Cannot present.");
+		return;
+	}
+
 	getCurrentRenderTarget().image.prepareForPresent(*commandBuffer);
 
 	commandBuffer->end();
