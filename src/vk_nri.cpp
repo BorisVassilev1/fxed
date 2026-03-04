@@ -166,9 +166,9 @@ static VkFormat nriFormat2vkFormat[] = {
 std::pair<const char *, bool> extensions[] = {
 	{"VK_KHR_surface", true},
 #ifdef __linux__
-	{"VK_KHR_xlib_surface", true}, {"VK_KHR_wayland_surface", false}, {"VK_KHR_xcb_surface", false},
+	//{"VK_KHR_xlib_surface", true}, {"VK_KHR_wayland_surface", false}, {"VK_KHR_xcb_surface", false},
 #elif defined(_WIN32)
-	{"VK_KHR_win32_surface", true},
+	//{"VK_KHR_win32_surface", true},
 #endif
 	{"VK_EXT_debug_utils", false},
 };

@@ -25,9 +25,8 @@ glm::vec2 TextMesh::updateText(std::span<const char32_t> text, fxed::FontAtlas &
 	int		  advanceX		  = 0;
 	double	  advanceDX		  = 0.0;
 
-	double lineWidthChars = lineWidth > 0 ? lineWidth / font.getFontSize() : 0;
+	double lineWidthChars = lineWidth > 0 ? std::floor(lineWidth / font.getFontSize()) : 0;
 	double lineHeight	  = 1.0;
-	bool   cursorFound	  = false;
 
 	size_t j = 0;
 	for (size_t i = 0; i < text.size(); i++) {
@@ -36,20 +35,20 @@ glm::vec2 TextMesh::updateText(std::span<const char32_t> text, fxed::FontAtlas &
 			break;
 		}
 		if (text[i] == '\n') {
+			if (cursorPos.x == advanceX && cursorPos.y == advanceY) {
+				cursorPosResult = glm::vec2(advanceDX, advanceDY);
+			}
+
 			advanceDY += lineHeight;
 			advanceDX = 0.0;
 			advanceY += 1;
 			advanceX = 0;
 
-			if (cursorPos.x >= advanceX && cursorPos.y >= advanceY) {
-				cursorFound		= true;
-				cursorPosResult = glm::vec2(advanceDX, advanceDY);
-			}
 			continue;
 		}
 
 		auto box = font.getGlyphBox(text[i]);
-		if (lineWidth > 0 && advanceDX + box.advance > lineWidthChars) {
+		if (lineWidth > 0 && advanceDX + box.advance >= lineWidthChars) {
 			advanceDY += lineHeight;
 			advanceDX = 0.0;
 		}
@@ -84,15 +83,10 @@ glm::vec2 TextMesh::updateText(std::span<const char32_t> text, fxed::FontAtlas &
 			++j;
 		}
 
+		if (cursorPos.x == advanceX && cursorPos.y == advanceY) { cursorPosResult = glm::vec2(advanceDX, advanceDY); }
 		advanceX += 1;
 		advanceDX += box.advance;
-		if (cursorPos.x >= advanceX && cursorPos.y >= advanceY) {
-			cursorFound		= true;
-			cursorPosResult = glm::vec2(advanceDX, advanceDY);
-		}
 	}
-
-	// if (!cursorFound) { cursorPosResult = glm::vec2(advanceDX, advanceDY); }
 
 	this->indexCount = static_cast<uint32_t>(indexCount);
 	return cursorPosResult;
