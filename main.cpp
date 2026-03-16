@@ -135,7 +135,6 @@ int main(int argc, char *argv[]) {
 		bool res = win->beginFrame();
 		if (!res) {
 			window.swapBuffers();
-			// std::this_thread::sleep_for(std::chrono::milliseconds(100));
 			continue;
 		}
 
@@ -152,12 +151,14 @@ int main(int argc, char *argv[]) {
 		cursorRealPos = textMesh.updateText(std::span<const char32_t>{text.begin(), text.end()}, font,
 											textEditor.getCursorPos(), window.getWidth());
 
-		glm::vec2 screenBounds = glm::vec2(pushConstants.viewportSize) / pushConstants.textSize;
-		// clamp translation to prevent moving text out of screen
-		pushConstants.translation.x =
-			std::clamp<float>(pushConstants.translation.x, -cursorRealPos.x + 1, screenBounds.x - cursorRealPos.x - 1);
-		pushConstants.translation.y =
-			std::clamp<float>(pushConstants.translation.y, -cursorRealPos.y + 1, screenBounds.y - cursorRealPos.y - 1);
+		if (textEditorController.hasCursorMoved()) {
+			glm::vec2 screenBounds = glm::vec2(pushConstants.viewportSize) / pushConstants.textSize;
+			// clamp translation to prevent moving text out of screen
+			pushConstants.translation.x = std::clamp<float>(pushConstants.translation.x, -cursorRealPos.x,
+															screenBounds.x - cursorRealPos.x - 1);
+			pushConstants.translation.y = std::clamp<float>(pushConstants.translation.y, -cursorRealPos.y + 1,
+															screenBounds.y - cursorRealPos.y - 1);
+		}
 
 		textMesh.bind(cmdBuf);
 		textMesh.draw(cmdBuf, *shader);
@@ -176,6 +177,7 @@ int main(int argc, char *argv[]) {
 		win->endRendering(cmdBuf);
 		win->endFrame();
 
+		textEditorController.resetCursorMoved();
 		window.swapBuffers();
 	}
 

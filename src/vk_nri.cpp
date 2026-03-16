@@ -210,10 +210,11 @@ static void printDeviceQueueFamiliesInfo(const vkb::PhysicalDevice &device) {
 void VulkanNRI::createInstance() {
 	vkb::InstanceBuilder builder;
 	builder.set_app_name("VulkanNRI");
-#ifdef NDEBUG
-	builder.request_validation_layers(false);
-#else
+#ifndef NDEBUG
+	dbLog(dbg::LOG_INFO, "Requesting validation layers for Vulkan instance");
 	builder.request_validation_layers(true);
+#else
+	builder.request_validation_layers(false);
 #endif
 	builder.set_engine_name("NoEngine");
 	builder.set_engine_version(1);
