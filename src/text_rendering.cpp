@@ -16,11 +16,7 @@ TextMesh::TextMesh(nri::NRI &nri, nri::CommandQueue &q, std::size_t maxCharCount
 	}
 }
 
-enum class CharacterDrawMode {
-	ALPHA = 0,
-	COLOR = 1,
-	MSDF = 2
-};
+enum class CharacterDrawMode { ALPHA = 0, COLOR = 1, MSDF = 2 };
 
 glm::vec2 TextMesh::updateText(std::span<const char32_t> text, fxed::FontAtlas &font, glm::ivec2 cursorPos,
 							   float lineWidth) {
@@ -87,13 +83,11 @@ glm::vec2 TextMesh::updateText(std::span<const char32_t> text, fxed::FontAtlas &
 			vertexData[4 * j + 3].v = (box.rect.y + box.rect.h) / (float)font.getAtlasSize();
 
 			CharacterDrawMode drawMode = CharacterDrawMode::ALPHA;
-			//if (font.getFontSize() >= 32) {
+			// if (font.getFontSize() >= 32) {
 			//	drawMode = CharacterDrawMode::MSDF;
-			//}
+			// }
 
-			if(box.isBitmap) {
-				drawMode = CharacterDrawMode::COLOR;
-			}
+			if (box.isBitmap) { drawMode = CharacterDrawMode::COLOR; }
 
 			bool drawmodeBit0 = static_cast<int>(drawMode) & 1;
 			bool drawmodeBit1 = static_cast<int>(drawMode) & 2;
@@ -132,7 +126,8 @@ struct PushConstantsCursor {
 	float	   time;
 };
 
-TextRenderer::TextRenderer(nri::NRI &nri, nri::CommandQueue &queue, fxed::FontAtlas &&font) : font(std::move(font)) {
+TextRenderer::TextRenderer(nri::NRI &nri, nri::CommandQueue &queue, fxed::FontAtlas &&font)
+	: font(std::move(font)), fontSize(this->font.getFontSize()) {
 	auto sb = nri.createProgramBuilder();
 	shader	= sb->addShaderModule(nri::ShaderCreateInfo{"shaders/text.hlsl", "VSMain", nri::SHADER_TYPE_VERTEX})
 				 .addShaderModule(nri::ShaderCreateInfo{"shaders/text.hlsl", "PSMain", nri::SHADER_TYPE_FRAGMENT})
@@ -151,16 +146,20 @@ TextRenderer::TextRenderer(nri::NRI &nri, nri::CommandQueue &queue, fxed::FontAt
 	cursorMesh = std::make_unique<fxed::QuadMesh>(nri, queue, glm::vec2(0.1, 1.0f));
 }
 
-float TextRenderer::getFontSize() const { return static_cast<float>(font.getFontSize()); }
-void  TextRenderer::setFontSize(uint32_t size) { font.resize(size); }
+float TextRenderer::getFontSize() const { return fontSize; }
+void  TextRenderer::setFontSize(uint32_t size) {
+	 fontSize = static_cast<float>(size);
+	 font.resize(size);
+}
 
-void TextRenderer::renderText(nri::CommandBuffer &cmdBuf, const fxed::TextMesh &textMesh, const TextRenderState &renderState) {
+void TextRenderer::renderText(nri::CommandBuffer &cmdBuf, const fxed::TextMesh &textMesh,
+							  const TextRenderState &renderState) {
 	shader->bind(cmdBuf);
 
 	PushConstants pushConstants{.viewportSize  = renderState.viewportSize,
-								.translation   = renderState.translation,
+								.translation   = renderState.translation + 1,
 								.textureHandle = font.getHandle(),
-								.textSize	   = renderState.fontSize,
+								.textSize	   = fontSize,
 								.time		   = 0};
 
 	shader->setPushConstants(cmdBuf, &pushConstants, sizeof(pushConstants), 0);

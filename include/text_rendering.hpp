@@ -24,7 +24,6 @@ struct TextRenderState {
 	glm::ivec2 translation{0, 0};
 	glm::ivec2 viewportSize;
 	glm::vec2  cursorPos;
-	float	   fontSize;
 	bool	   showCursor = true;
 };
 
@@ -33,6 +32,7 @@ class TextRenderer {
 	std::unique_ptr<fxed::QuadMesh>		  cursorMesh;
 	std::unique_ptr<nri::GraphicsProgram> shader;
 	std::unique_ptr<nri::GraphicsProgram> cursorShader;
+	float fontSize;
 
    public:
 	fxed::FontAtlas &getFont() { return font; }

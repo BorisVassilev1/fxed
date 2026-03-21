@@ -60,6 +60,16 @@ class TextEditorController {
 class TextEditor : public TextEditorBase {
 	glm::ivec2					cursorPos{0, 0};
 	std::vector<std::u32string> lines;
+	int							currentMax = 0;
+
+	int32_t measureLineOffset(int line, int charOffset) const {
+		if (charOffset == -1) return -1;
+		int32_t offset = 0;
+		for (int i = 0; i < charOffset; i++) {
+			offset += lines[line][i] == '\t' ? 4 : 1;
+		}
+		return offset;
+	}
 
    public:
 	TextEditor() { lines.emplace_back(); }
@@ -89,6 +99,7 @@ class TextEditor : public TextEditorBase {
 			lines[cursorPos.y].insert(lines[cursorPos.y].begin() + cursorPos.x, c);
 			cursorPos.x++;
 		}
+		currentMax = measureLineOffset(cursorPos.y, cursorPos.x);
 	}
 
 	void deleteChar() override {
@@ -101,11 +112,27 @@ class TextEditor : public TextEditorBase {
 			lines.erase(lines.begin() + cursorPos.y);
 			cursorPos.y--;
 		}
+		currentMax = measureLineOffset(cursorPos.y, cursorPos.x);
 	}
 
 	void moveCursor(int dx, int dy) override {
-		cursorPos.y = std::clamp(cursorPos.y + dy, 0, (int32_t)lines.size() - 1);
-		cursorPos.x = std::clamp(cursorPos.x + dx, 0, (int32_t)lines[cursorPos.y].size());
+		int32_t currentLineOffset = 0;
+		for (int i = 0; i < cursorPos.x; i++) {
+			currentLineOffset += lines[cursorPos.y][i] == '\t' ? 4 : 1;
+		}
+		cursorPos.y				 = std::clamp(cursorPos.y + dy, 0, (int32_t)lines.size() - 1);
+		int32_t targetLineOffset = dx != 0 ? currentLineOffset + dx : currentMax;
+		if (dx != 0) { currentMax = targetLineOffset; }
+		int32_t newCursorX = 0;
+		while (newCursorX < (int32_t)lines[cursorPos.y].size() && targetLineOffset > 0) {
+			targetLineOffset -= lines[cursorPos.y][newCursorX] == '\t' ? 4 : 1;
+			newCursorX++;
+		}
+		if (targetLineOffset < 0 && dx < 0) {
+			newCursorX--;
+			currentMax = measureLineOffset(cursorPos.y, newCursorX);
+		}
+		cursorPos.x = std::clamp(newCursorX, 0, (int32_t)lines[cursorPos.y].size());
 	}
 
 	std::u32string getText() const override {

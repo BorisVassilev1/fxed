@@ -57,7 +57,6 @@ int main(int argc, char *argv[]) {
 		.translation  = {0, 0},
 		.viewportSize = {window.getWidth(), window.getHeight()},
 		.cursorPos	  = {0, 0},
-		.fontSize	  = textRenderer.getFontSize(),
 		.showCursor	  = true,
 	};
 
@@ -93,11 +92,11 @@ int main(int argc, char *argv[]) {
 		if (action == GLFW_PRESS || action == GLFW_REPEAT) {
 			if (mods & GLFW_MOD_CONTROL) {
 				if (key == GLFW_KEY_KP_ADD || key == GLFW_KEY_EQUAL) {
-					textRenderState.fontSize += 1;
-					textRenderer.setFontSize(textRenderState.fontSize);
+					textRenderer.setFontSize(textRenderer.getFontSize() + 1);
 				} else if (key == GLFW_KEY_KP_SUBTRACT || key == GLFW_KEY_MINUS) {
-					textRenderState.fontSize = std::max(2.f, textRenderState.fontSize - 1);
-					textRenderer.setFontSize(textRenderState.fontSize);
+					auto fontSize = textRenderer.getFontSize();
+					fontSize	  = std::max(2.f, fontSize - 1);
+					textRenderer.setFontSize(fontSize);
 				}
 			}
 		}
@@ -105,9 +104,10 @@ int main(int argc, char *argv[]) {
 	fxed::Mouse mouse(window);
 	fxed::Mouse::addScrollCallback([&](GLFWwindow *, double, double yOffset) {
 		if (fxed::Keyboard::getKey(GLFW_KEY_LEFT_CONTROL) || fxed::Keyboard::getKey(GLFW_KEY_RIGHT_CONTROL)) {
-			textRenderState.fontSize += std::copysign(1.f, (float)yOffset) * 1.0f;
-			textRenderState.fontSize = std::max(2.f, textRenderState.fontSize);
-			textRenderer.setFontSize(textRenderState.fontSize);
+			auto fontSize = textRenderer.getFontSize();
+			fontSize += std::copysign(1.f, (float)yOffset) * 1.0f;
+			fontSize = std::max(2.f, fontSize);
+			textRenderer.setFontSize(fontSize);
 		} else {
 			textRenderState.translation.y += std::copysign(1.f, yOffset) * 1.0f;
 		}
