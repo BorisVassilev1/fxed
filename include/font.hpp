@@ -59,7 +59,6 @@ class FontAtlas {
 		  fontSize(other.fontSize) {
 		other.data = nullptr;
 	}
-
 	FontAtlas(nri::NRI &nri, nri::CommandQueue &q, FontFallbackChain &&fallbackChain, uint32_t atlasSize,
 			  uint32_t fontSize = 48);
 	~FontAtlas();

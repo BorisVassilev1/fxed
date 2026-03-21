@@ -1,4 +1,5 @@
 #include "text_rendering.hpp"
+#include "nri.hpp"
 using namespace fxed;
 
 TextMesh::TextMesh(nri::NRI &nri, nri::CommandQueue &q, std::size_t maxCharCount)
@@ -90,4 +91,70 @@ glm::vec2 TextMesh::updateText(std::span<const char32_t> text, fxed::FontAtlas &
 
 	this->indexCount = static_cast<uint32_t>(indexCount);
 	return cursorPosResult;
+}
+
+struct PushConstants {
+	glm::ivec2			viewportSize;
+	glm::ivec2			translation = {0, 0};
+	nri::ResourceHandle textureHandle;
+	float				textSize;
+	float				time;
+};
+
+struct PushConstantsCursor {
+	glm::ivec2 viewportSize;
+	glm::ivec2 translation = {0, 0};
+	glm::vec2  cursorPos;
+	float	   textSize;
+	float	   time;
+};
+
+TextRenderer::TextRenderer(nri::NRI &nri, nri::CommandQueue &queue, fxed::FontAtlas &&font) : font(std::move(font)) {
+	auto sb = nri.createProgramBuilder();
+	shader	= sb->addShaderModule(nri::ShaderCreateInfo{"shaders/text.hlsl", "VSMain", nri::SHADER_TYPE_VERTEX})
+				 .addShaderModule(nri::ShaderCreateInfo{"shaders/text.hlsl", "PSMain", nri::SHADER_TYPE_FRAGMENT})
+				 .setVertexBindings(fxed::TextMesh::getVertexBindings())
+				 .setPrimitiveType(nri::PRIMITIVE_TYPE_TRIANGLES)
+				 .setPushConstantRanges({{0, sizeof(PushConstants)}})
+				 .buildGraphicsProgram();
+
+	sb->clearShaderModules();
+	cursorShader =
+		sb->addShaderModule(nri::ShaderCreateInfo{"shaders/cursor.hlsl", "VSMain", nri::SHADER_TYPE_VERTEX})
+			.addShaderModule(nri::ShaderCreateInfo{"shaders/cursor.hlsl", "PSMain", nri::SHADER_TYPE_FRAGMENT})
+			.setPushConstantRanges({{0, sizeof(PushConstantsCursor)}})
+			.buildGraphicsProgram();
+
+	cursorMesh = std::make_unique<fxed::QuadMesh>(nri, queue, glm::vec2(0.1, 1.0f));
+}
+
+float TextRenderer::getFontSize() const { return static_cast<float>(font.getFontSize()); }
+void  TextRenderer::setFontSize(uint32_t size) { font.resize(size); }
+
+void TextRenderer::renderText(nri::CommandBuffer &cmdBuf, const fxed::TextMesh &textMesh, glm::vec2 cursorPos) {
+	shader->bind(cmdBuf);
+
+	PushConstants pushConstants{.viewportSize  = this->viewportSize,
+								.translation   = {0, 0},
+								.textureHandle = font.getHandle(),
+								.textSize	   = static_cast<float>(font.getFontSize()),
+								.time		   = 0};
+
+	shader->setPushConstants(cmdBuf, &pushConstants, sizeof(pushConstants), 0);
+
+	textMesh.bind(cmdBuf);
+	textMesh.draw(cmdBuf, *shader);
+
+	if (showCursor) {
+		PushConstantsCursor cursorPushConstants{.viewportSize = this->viewportSize,
+												.translation  = pushConstants.translation,
+												.cursorPos	  = cursorPos,
+												.textSize	  = pushConstants.textSize,
+												.time		  = 0};
+
+		cursorShader->bind(cmdBuf);
+		cursorShader->setPushConstants(cmdBuf, &cursorPushConstants, sizeof(cursorPushConstants), 0);
+		cursorMesh->bind(cmdBuf);
+		cursorMesh->draw(cmdBuf, *cursorShader);
+	}
 }

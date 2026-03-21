@@ -38,8 +38,7 @@ int main(int argc, char *argv[]) {
 	// 🔔 asd
 	fxed::Window window(*nri, 800, 600, "Vulkan NRI Window");
 
-	// glfwSetWindowAttrib(window.getHandle(), GLFW_DECORATED, !glfwGetWindowAttrib(window.getHandle(),
-	// GLFW_DECORATED));
+	glfwSetWindowAttrib(window.getHandle(), GLFW_DECORATED, !glfwGetWindowAttrib(window.getHandle(), GLFW_DECORATED));
 	auto &win		= window.getNativeWindow();
 	win->clearColor = glm::vec4(30 / 255.f, 30 / 255.f, 46 / 255.f, 1.0f);
 
@@ -52,24 +51,8 @@ int main(int argc, char *argv[]) {
 		fxed::FontAtlas::findFontPath("Noto Color Emoji"),	   // fallback for emojis
 	});
 
-	auto font = fxed::FontAtlas(*nri, window.getMainQueue(), std::move(fallbackChain), 512, 20);
-
-	auto textureHandle = font.getHandle();
-
-	auto sb		= nri->createProgramBuilder();
-	auto shader = sb->addShaderModule(nri::ShaderCreateInfo{"shaders/text.hlsl", "VSMain", nri::SHADER_TYPE_VERTEX})
-					  .addShaderModule(nri::ShaderCreateInfo{"shaders/text.hlsl", "PSMain", nri::SHADER_TYPE_FRAGMENT})
-					  .setVertexBindings(fxed::TextMesh::getVertexBindings())
-					  .setPrimitiveType(nri::PRIMITIVE_TYPE_TRIANGLES)
-					  .setPushConstantRanges({{0, sizeof(PushConstants)}})
-					  .buildGraphicsProgram();
-
-	sb->clearShaderModules();
-	auto cursorShader =
-		sb->addShaderModule(nri::ShaderCreateInfo{"shaders/cursor.hlsl", "VSMain", nri::SHADER_TYPE_VERTEX})
-			.addShaderModule(nri::ShaderCreateInfo{"shaders/cursor.hlsl", "PSMain", nri::SHADER_TYPE_FRAGMENT})
-			.setPushConstantRanges({{0, sizeof(PushConstantsCursor)}})
-			.buildGraphicsProgram();
+	fxed::TextRenderer textRenderer(*nri, window.getMainQueue(),
+									fxed::FontAtlas(*nri, window.getMainQueue(), std::move(fallbackChain), 512, 20));
 
 	// load argv[1] if exists
 	std::u32string text;
@@ -93,15 +76,7 @@ int main(int argc, char *argv[]) {
 
 	auto cursorMesh = std::make_unique<fxed::QuadMesh>(*nri, window.getMainQueue(), glm::vec2(0.1, 1.0f));
 
-	PushConstants pushConstants{
-		.viewportSize  = {window.getWidth(), window.getHeight()},
-		.translation   = {0, 0},
-		.textureHandle = textureHandle,
-		.textSize	   = 20.0f,
-		.time		   = 0.0f,
-	};
-
-	auto resizeCallback = [&](GLFWwindow *, int w, int h) { pushConstants.viewportSize = {w, h}; };
+	auto resizeCallback = [&](GLFWwindow *, int w, int h) { textRenderer.viewportSize = {w, h}; };
 	resizeCallback(nullptr, window.getWidth(), window.getHeight());
 
 	window.addResizeCallback(resizeCallback);
@@ -111,11 +86,11 @@ int main(int argc, char *argv[]) {
 		if (action == GLFW_PRESS || action == GLFW_REPEAT) {
 			if (mods & GLFW_MOD_CONTROL) {
 				if (key == GLFW_KEY_KP_ADD || key == GLFW_KEY_EQUAL) {
-					pushConstants.textSize += 2;
-					font.resize((uint32_t)pushConstants.textSize);
+					auto fontSize = textRenderer.getFontSize();
+					textRenderer.setFontSize((uint32_t)fontSize + 2);
 				} else if (key == GLFW_KEY_KP_SUBTRACT || key == GLFW_KEY_MINUS) {
-					pushConstants.textSize -= 2;
-					font.resize((uint32_t)pushConstants.textSize);
+					auto fontSize = textRenderer.getFontSize();
+					textRenderer.setFontSize(std::max(2U, (uint32_t)fontSize - 2));
 				}
 			}
 		}
@@ -123,10 +98,10 @@ int main(int argc, char *argv[]) {
 	fxed::Mouse mouse(window);
 	fxed::Mouse::addScrollCallback([&](GLFWwindow *, double, double yOffset) {
 		if (fxed::Keyboard::getKey(GLFW_KEY_LEFT_CONTROL) || fxed::Keyboard::getKey(GLFW_KEY_RIGHT_CONTROL)) {
-			pushConstants.textSize += std::copysign(1.f, yOffset) * 2.0f;
-			font.resize((uint32_t)pushConstants.textSize);
+			auto fontSize = textRenderer.getFontSize();
+			textRenderer.setFontSize((uint32_t)std::max(2.f, fontSize + std::copysign(1.f, (float)yOffset) * 2.0f));
 		} else {
-			pushConstants.translation.y += std::copysign(1.f, yOffset) * 2.0f;
+			textRenderer.translation.y += std::copysign(1.f, yOffset) * 2.0f;
 		}
 	});
 
@@ -139,40 +114,26 @@ int main(int argc, char *argv[]) {
 		}
 
 		auto &cmdBuf = win->getCurrentCommandBuffer();
-
-		shader->bind(cmdBuf);
 		win->beginRendering(cmdBuf, win->getCurrentRenderTarget());
-
-		shader->setPushConstants(cmdBuf, &pushConstants, sizeof(pushConstants), 0);
 
 		std::u32string text = textEditor.getText();
 		glm::vec2	   cursorRealPos;
-		font.syncWithGPU();
-		cursorRealPos = textMesh.updateText(std::span<const char32_t>{text.begin(), text.end()}, font,
+		textRenderer.getFont().syncWithGPU();
+		cursorRealPos = textMesh.updateText(std::span<const char32_t>{text.begin(), text.end()}, textRenderer.getFont(),
 											textEditor.getCursorPos(), window.getWidth());
 
 		if (textEditorController.hasCursorMoved()) {
-			glm::vec2 screenBounds = glm::vec2(pushConstants.viewportSize) / pushConstants.textSize;
+			glm::vec2 screenBounds = glm::vec2(textRenderer.viewportSize) / textRenderer.getFontSize();
 			// clamp translation to prevent moving text out of screen
-			pushConstants.translation.x = std::clamp<float>(pushConstants.translation.x, -cursorRealPos.x,
-															screenBounds.x - cursorRealPos.x - 1);
-			pushConstants.translation.y = std::clamp<float>(pushConstants.translation.y, -cursorRealPos.y + 1,
-															screenBounds.y - cursorRealPos.y - 1);
+			textRenderer.translation.x =
+				std::clamp<float>(textRenderer.translation.x, -cursorRealPos.x, screenBounds.x - cursorRealPos.x - 1);
+			textRenderer.translation.y = std::clamp<float>(textRenderer.translation.y, -cursorRealPos.y + 1,
+														   screenBounds.y - cursorRealPos.y - 1);
 		}
+		auto time				= glfwGetTime();
+		textRenderer.showCursor = textEditorController.milisecondsSinceLastMove() < 200 || (time - int64_t(time)) < 0.5;
 
-		textMesh.bind(cmdBuf);
-		textMesh.draw(cmdBuf, *shader);
-
-		PushConstantsCursor cursorPushConstants{
-			.viewportSize = {window.getWidth(), window.getHeight()},
-			.translation  = pushConstants.translation,
-			.cursorPos	  = cursorRealPos,
-			.textSize	  = pushConstants.textSize,
-			.time		  = (textEditorController.milisecondsSinceLastMove() < 200) ? 0 : (float)glfwGetTime()};
-		cursorShader->bind(cmdBuf);
-		cursorShader->setPushConstants(cmdBuf, &cursorPushConstants, sizeof(cursorPushConstants), 0);
-		cursorMesh->bind(cmdBuf);
-		cursorMesh->draw(cmdBuf, *cursorShader);
+		textRenderer.renderText(cmdBuf, textMesh, cursorRealPos);
 
 		win->endRendering(cmdBuf);
 		win->endFrame();
