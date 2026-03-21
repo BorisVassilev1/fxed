@@ -16,6 +16,7 @@ class TextEditorController {
 	TextEditorBase								  &editor;
 	std::chrono::high_resolution_clock::time_point lastMoveTime = std::chrono::high_resolution_clock::now();
 	bool										   cursorMoved	= false;
+	bool										   textChanged	= true;
 
    public:
 	TextEditorController(TextEditorBase &editor) : editor(editor) {
@@ -23,16 +24,20 @@ class TextEditorController {
 			editor.insertChar((char32_t)codepoint);
 			lastMoveTime = std::chrono::high_resolution_clock::now();
 			cursorMoved	 = true;
+			textChanged	 = true;
 		});
 		fxed::Keyboard::addKeyCallback(
 			[this, &editor](GLFWwindow *window, int key, int scancode, int action, int mods) {
 				if (action == GLFW_PRESS || action == GLFW_REPEAT) {
 					if (key == GLFW_KEY_BACKSPACE) {
 						editor.deleteChar();
+						textChanged = true;
 					} else if (key == GLFW_KEY_ENTER) {
 						editor.insertChar('\n');
+						textChanged = true;
 					} else if (key == GLFW_KEY_TAB) {
 						editor.insertChar('\t');
+						textChanged = true;
 					} else if (key == GLFW_KEY_LEFT) {
 						editor.moveCursor(-1, 0);
 					} else if (key == GLFW_KEY_RIGHT) {
@@ -54,7 +59,9 @@ class TextEditorController {
 	}
 
 	bool hasCursorMoved() const { return cursorMoved; }
+	bool hasTextChanged() const { return textChanged; }
 	void resetCursorMoved() { cursorMoved = false; }
+	void resetTextChanged() { textChanged = false; }
 };
 
 class TextEditor : public TextEditorBase {

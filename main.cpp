@@ -11,6 +11,7 @@
 #include "text_editor.hpp"
 #include "text_rendering.hpp"
 #include "utf8_convert.hpp"
+#include "pane.hpp"
 
 struct PushConstants {
 	glm::ivec2			viewportSize;
@@ -113,6 +114,8 @@ int main(int argc, char *argv[]) {
 		}
 	});
 
+	fxed::Pane pane(*nri, window.getMainQueue());
+
 	while (!window.shouldClose()) {
 		window.beginFrame();
 		bool res = win->beginFrame();
@@ -124,11 +127,14 @@ int main(int argc, char *argv[]) {
 		auto &cmdBuf = win->getCurrentCommandBuffer();
 		win->beginRendering(cmdBuf, win->getCurrentRenderTarget());
 
+		pane.render(cmdBuf);
+
 		std::u32string text			 = textEditor.getText();
 		glm::vec2	  &cursorRealPos = textRenderState.cursorPos;
 		textRenderer.getFont().syncWithGPU();
-		cursorRealPos = textMesh.updateText(std::span<const char32_t>{text.begin(), text.end()}, textRenderer.getFont(),
-											textEditor.getCursorPos(), window.getWidth());
+		if (textEditorController.hasTextChanged())
+			cursorRealPos = textMesh.updateText(std::span<const char32_t>{text.begin(), text.end()},
+												textRenderer.getFont(), textEditor.getCursorPos(), window.getWidth());
 
 		if (textEditorController.hasCursorMoved()) {
 			glm::vec2 screenBounds = glm::vec2(textRenderState.viewportSize) / textRenderer.getFontSize();

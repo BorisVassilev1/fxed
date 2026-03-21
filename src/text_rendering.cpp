@@ -157,7 +157,7 @@ void TextRenderer::renderText(nri::CommandBuffer &cmdBuf, const fxed::TextMesh &
 	shader->bind(cmdBuf);
 
 	PushConstants pushConstants{.viewportSize  = renderState.viewportSize,
-								.translation   = renderState.translation + 1,
+								.translation   = renderState.translation + glm::ivec2(1, 0),
 								.textureHandle = font.getHandle(),
 								.textSize	   = fontSize,
 								.time		   = 0};
