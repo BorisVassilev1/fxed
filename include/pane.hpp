@@ -4,11 +4,12 @@
 
 #include "mesh.hpp"
 #include "nri.hpp"
+#include "resource_manager.hpp"
 namespace fxed {
 
 class Pane {
-	static std::unique_ptr<nri::GraphicsProgram> backgroundShader;
-	static std::unique_ptr<fxed::QuadMesh>		 backgroundMesh;
+	static ResourceID backgroundShaderID;
+	static ResourceID backgroundMeshID;
 
    public:
 	Pane(nri::NRI &nri, nri::CommandQueue &queue);

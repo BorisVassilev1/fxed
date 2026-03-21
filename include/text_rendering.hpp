@@ -4,6 +4,7 @@
 #include "font.hpp"
 #include "mesh.hpp"
 #include "nri.hpp"
+#include "resource_manager.hpp"
 #include "utils.hpp"
 namespace fxed {
 
@@ -28,10 +29,10 @@ struct TextRenderState {
 };
 
 class TextRenderer {
-	fxed::FontAtlas						  font;
-	std::unique_ptr<fxed::QuadMesh>		  cursorMesh;
-	std::unique_ptr<nri::GraphicsProgram> shader;
-	std::unique_ptr<nri::GraphicsProgram> cursorShader;
+	fxed::FontAtlas font;
+	static ResourceID		cursorMeshID;
+	static ResourceID		shaderID;
+	static ResourceID		cursorShaderID;
 	float fontSize;
 
    public:

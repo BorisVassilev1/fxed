@@ -1,5 +1,6 @@
 #include "text_rendering.hpp"
 #include "nri.hpp"
+#include "resource_manager.hpp"
 using namespace fxed;
 
 TextMesh::TextMesh(nri::NRI &nri, nri::CommandQueue &q, std::size_t maxCharCount)
@@ -126,24 +127,39 @@ struct PushConstantsCursor {
 	float	   time;
 };
 
+ResourceID TextRenderer::cursorMeshID	= ResourceID::invalid();
+ResourceID TextRenderer::shaderID		= ResourceID::invalid();
+ResourceID TextRenderer::cursorShaderID = ResourceID::invalid();
+
 TextRenderer::TextRenderer(nri::NRI &nri, nri::CommandQueue &queue, fxed::FontAtlas &&font)
 	: font(std::move(font)), fontSize(this->font.getFontSize()) {
 	auto sb = nri.createProgramBuilder();
-	shader	= sb->addShaderModule(nri::ShaderCreateInfo{"shaders/text.hlsl", "VSMain", nri::SHADER_TYPE_VERTEX})
-				 .addShaderModule(nri::ShaderCreateInfo{"shaders/text.hlsl", "PSMain", nri::SHADER_TYPE_FRAGMENT})
-				 .setVertexBindings(fxed::TextMesh::getVertexBindings())
-				 .setPrimitiveType(nri::PRIMITIVE_TYPE_TRIANGLES)
-				 .setPushConstantRanges({{0, sizeof(PushConstants)}})
-				 .buildGraphicsProgram();
+	if (shaderID.invalid()) {
+		auto shader =
+			sb->addShaderModule(nri::ShaderCreateInfo{"shaders/text.hlsl", "VSMain", nri::SHADER_TYPE_VERTEX})
+				.addShaderModule(nri::ShaderCreateInfo{"shaders/text.hlsl", "PSMain", nri::SHADER_TYPE_FRAGMENT})
+				.setVertexBindings(fxed::TextMesh::getVertexBindings())
+				.setPrimitiveType(nri::PRIMITIVE_TYPE_TRIANGLES)
+				.setPushConstantRanges({{0, sizeof(PushConstants)}})
+				.buildGraphicsProgram();
+		shaderID = ResourceManager::getInstance().addShader(std::move(shader));
+	}
 
 	sb->clearShaderModules();
-	cursorShader =
-		sb->addShaderModule(nri::ShaderCreateInfo{"shaders/cursor.hlsl", "VSMain", nri::SHADER_TYPE_VERTEX})
-			.addShaderModule(nri::ShaderCreateInfo{"shaders/cursor.hlsl", "PSMain", nri::SHADER_TYPE_FRAGMENT})
-			.setPushConstantRanges({{0, sizeof(PushConstantsCursor)}})
-			.buildGraphicsProgram();
+	if (cursorShaderID.invalid()) {
+		auto cursorShader =
+			sb->addShaderModule(nri::ShaderCreateInfo{"shaders/cursor.hlsl", "VSMain", nri::SHADER_TYPE_VERTEX})
+				.addShaderModule(nri::ShaderCreateInfo{"shaders/cursor.hlsl", "PSMain", nri::SHADER_TYPE_FRAGMENT})
+				.setPushConstantRanges({{0, sizeof(PushConstantsCursor)}})
+				.buildGraphicsProgram();
 
-	cursorMesh = std::make_unique<fxed::QuadMesh>(nri, queue, glm::vec2(0.1, 1.0f));
+		cursorShaderID = ResourceManager::getInstance().addShader(std::move(cursorShader));
+	}
+
+	if (cursorMeshID.invalid()) {
+		auto cursorMesh = std::make_unique<fxed::QuadMesh>(nri, queue, glm::vec2(0.1f, 1.0f));
+		cursorMeshID	= ResourceManager::getInstance().addMesh(std::move(cursorMesh));
+	}
 }
 
 float TextRenderer::getFontSize() const { return fontSize; }
@@ -154,7 +170,8 @@ void  TextRenderer::setFontSize(uint32_t size) {
 
 void TextRenderer::renderText(nri::CommandBuffer &cmdBuf, const fxed::TextMesh &textMesh,
 							  const TextRenderState &renderState) {
-	shader->bind(cmdBuf);
+	auto &shader = (nri::GraphicsProgram &)shaderID;
+	shader.bind(cmdBuf);
 
 	PushConstants pushConstants{.viewportSize  = renderState.viewportSize,
 								.translation   = renderState.translation + glm::ivec2(1, 0),
@@ -162,10 +179,10 @@ void TextRenderer::renderText(nri::CommandBuffer &cmdBuf, const fxed::TextMesh &
 								.textSize	   = fontSize,
 								.time		   = 0};
 
-	shader->setPushConstants(cmdBuf, &pushConstants, sizeof(pushConstants), 0);
+	shader.setPushConstants(cmdBuf, &pushConstants, sizeof(pushConstants), 0);
 
 	textMesh.bind(cmdBuf);
-	textMesh.draw(cmdBuf, *shader);
+	textMesh.draw(cmdBuf, shader);
 
 	if (renderState.showCursor) {
 		PushConstantsCursor cursorPushConstants{.viewportSize = renderState.viewportSize,
@@ -174,9 +191,11 @@ void TextRenderer::renderText(nri::CommandBuffer &cmdBuf, const fxed::TextMesh &
 												.textSize	  = pushConstants.textSize,
 												.time		  = 0};
 
-		cursorShader->bind(cmdBuf);
-		cursorShader->setPushConstants(cmdBuf, &cursorPushConstants, sizeof(cursorPushConstants), 0);
-		cursorMesh->bind(cmdBuf);
-		cursorMesh->draw(cmdBuf, *cursorShader);
+		auto &cursorShader = (nri::GraphicsProgram &)cursorShaderID;
+		cursorShader.bind(cmdBuf);
+		cursorShader.setPushConstants(cmdBuf, &cursorPushConstants, sizeof(cursorPushConstants), 0);
+		auto &cursorMesh = (fxed::Mesh &)cursorMeshID;
+		cursorMesh.bind(cmdBuf);
+		cursorMesh.draw(cmdBuf, cursorShader);
 	}
 }
