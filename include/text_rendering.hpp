@@ -20,6 +20,14 @@ class TextMesh : public fxed::Mesh {
 						 float lineWidth = 0);
 };
 
+struct TextRenderState {
+	glm::ivec2 translation{0, 0};
+	glm::ivec2 viewportSize;
+	glm::vec2  cursorPos;
+	float	   fontSize;
+	bool	   showCursor = true;
+};
+
 class TextRenderer {
 	fxed::FontAtlas						  font;
 	std::unique_ptr<fxed::QuadMesh>		  cursorMesh;
@@ -27,18 +35,14 @@ class TextRenderer {
 	std::unique_ptr<nri::GraphicsProgram> cursorShader;
 
    public:
-	glm::ivec2 translation{0, 0};
-	glm::ivec2 viewportSize;
-	bool showCursor = true;
-
 	fxed::FontAtlas &getFont() { return font; }
-	float getFontSize() const;
-	void setFontSize(uint32_t size);
+	float			 getFontSize() const;
+	void			 setFontSize(uint32_t size);
 
 	TextRenderer(nri::NRI &nri, nri::CommandQueue &queue, fxed::FontAtlas &&font);
 	DELETE_COPY_AND_ASSIGNMENT(TextRenderer);
 
-	void renderText(nri::CommandBuffer &cmdBuf, const fxed::TextMesh &textMesh, glm::vec2 cursorPos);
+	void renderText(nri::CommandBuffer &cmdBuf, const fxed::TextMesh &textMesh, const TextRenderState &renderState);
 };
 
 }	  // namespace fxed

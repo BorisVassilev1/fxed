@@ -13,6 +13,7 @@ struct GlyphBox {
 		double l, b, r, t;
 	} bounds;
 	Rectangle rect;
+	bool isBitmap;
 };
 
 };	   // namespace fxed

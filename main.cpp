@@ -51,8 +51,15 @@ int main(int argc, char *argv[]) {
 		fxed::FontAtlas::findFontPath("Noto Color Emoji"),	   // fallback for emojis
 	});
 
-	fxed::TextRenderer textRenderer(*nri, window.getMainQueue(),
-									fxed::FontAtlas(*nri, window.getMainQueue(), std::move(fallbackChain), 512, 20));
+	fxed::TextRenderer	  textRenderer(*nri, window.getMainQueue(),
+									   fxed::FontAtlas(*nri, window.getMainQueue(), std::move(fallbackChain), 512, 20));
+	fxed::TextRenderState textRenderState{
+		.translation  = {0, 0},
+		.viewportSize = {window.getWidth(), window.getHeight()},
+		.cursorPos	  = {0, 0},
+		.fontSize	  = textRenderer.getFontSize(),
+		.showCursor	  = true,
+	};
 
 	// load argv[1] if exists
 	std::u32string text;
@@ -76,7 +83,7 @@ int main(int argc, char *argv[]) {
 
 	auto cursorMesh = std::make_unique<fxed::QuadMesh>(*nri, window.getMainQueue(), glm::vec2(0.1, 1.0f));
 
-	auto resizeCallback = [&](GLFWwindow *, int w, int h) { textRenderer.viewportSize = {w, h}; };
+	auto resizeCallback = [&](GLFWwindow *, int w, int h) { textRenderState.viewportSize = {w, h}; };
 	resizeCallback(nullptr, window.getWidth(), window.getHeight());
 
 	window.addResizeCallback(resizeCallback);
@@ -86,11 +93,11 @@ int main(int argc, char *argv[]) {
 		if (action == GLFW_PRESS || action == GLFW_REPEAT) {
 			if (mods & GLFW_MOD_CONTROL) {
 				if (key == GLFW_KEY_KP_ADD || key == GLFW_KEY_EQUAL) {
-					auto fontSize = textRenderer.getFontSize();
-					textRenderer.setFontSize((uint32_t)fontSize + 2);
+					textRenderState.fontSize += 1;
+					textRenderer.setFontSize(textRenderState.fontSize);
 				} else if (key == GLFW_KEY_KP_SUBTRACT || key == GLFW_KEY_MINUS) {
-					auto fontSize = textRenderer.getFontSize();
-					textRenderer.setFontSize(std::max(2U, (uint32_t)fontSize - 2));
+					textRenderState.fontSize = std::max(2.f, textRenderState.fontSize - 1);
+					textRenderer.setFontSize(textRenderState.fontSize);
 				}
 			}
 		}
@@ -98,10 +105,11 @@ int main(int argc, char *argv[]) {
 	fxed::Mouse mouse(window);
 	fxed::Mouse::addScrollCallback([&](GLFWwindow *, double, double yOffset) {
 		if (fxed::Keyboard::getKey(GLFW_KEY_LEFT_CONTROL) || fxed::Keyboard::getKey(GLFW_KEY_RIGHT_CONTROL)) {
-			auto fontSize = textRenderer.getFontSize();
-			textRenderer.setFontSize((uint32_t)std::max(2.f, fontSize + std::copysign(1.f, (float)yOffset) * 2.0f));
+			textRenderState.fontSize += std::copysign(1.f, (float)yOffset) * 1.0f;
+			textRenderState.fontSize = std::max(2.f, textRenderState.fontSize);
+			textRenderer.setFontSize(textRenderState.fontSize);
 		} else {
-			textRenderer.translation.y += std::copysign(1.f, yOffset) * 2.0f;
+			textRenderState.translation.y += std::copysign(1.f, yOffset) * 1.0f;
 		}
 	});
 
@@ -116,24 +124,25 @@ int main(int argc, char *argv[]) {
 		auto &cmdBuf = win->getCurrentCommandBuffer();
 		win->beginRendering(cmdBuf, win->getCurrentRenderTarget());
 
-		std::u32string text = textEditor.getText();
-		glm::vec2	   cursorRealPos;
+		std::u32string text			 = textEditor.getText();
+		glm::vec2	  &cursorRealPos = textRenderState.cursorPos;
 		textRenderer.getFont().syncWithGPU();
 		cursorRealPos = textMesh.updateText(std::span<const char32_t>{text.begin(), text.end()}, textRenderer.getFont(),
 											textEditor.getCursorPos(), window.getWidth());
 
 		if (textEditorController.hasCursorMoved()) {
-			glm::vec2 screenBounds = glm::vec2(textRenderer.viewportSize) / textRenderer.getFontSize();
+			glm::vec2 screenBounds = glm::vec2(textRenderState.viewportSize) / textRenderer.getFontSize();
 			// clamp translation to prevent moving text out of screen
-			textRenderer.translation.x =
-				std::clamp<float>(textRenderer.translation.x, -cursorRealPos.x, screenBounds.x - cursorRealPos.x - 1);
-			textRenderer.translation.y = std::clamp<float>(textRenderer.translation.y, -cursorRealPos.y + 1,
-														   screenBounds.y - cursorRealPos.y - 1);
+			textRenderState.translation.x = std::clamp<float>(textRenderState.translation.x, -cursorRealPos.x,
+															  screenBounds.x - cursorRealPos.x - 1);
+			textRenderState.translation.y = std::clamp<float>(textRenderState.translation.y, -cursorRealPos.y + 1,
+															  screenBounds.y - cursorRealPos.y - 1);
 		}
-		auto time				= glfwGetTime();
-		textRenderer.showCursor = textEditorController.milisecondsSinceLastMove() < 200 || (time - int64_t(time)) < 0.5;
+		auto time = glfwGetTime();
+		textRenderState.showCursor =
+			textEditorController.milisecondsSinceLastMove() < 200 || (time - int64_t(time)) < 0.5;
 
-		textRenderer.renderText(cmdBuf, textMesh, cursorRealPos);
+		textRenderer.renderText(cmdBuf, textMesh, textRenderState);
 
 		win->endRendering(cmdBuf);
 		win->endFrame();

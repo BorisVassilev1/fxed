@@ -16,6 +16,12 @@ TextMesh::TextMesh(nri::NRI &nri, nri::CommandQueue &q, std::size_t maxCharCount
 	}
 }
 
+enum class CharacterDrawMode {
+	ALPHA = 0,
+	COLOR = 1,
+	MSDF = 2
+};
+
 glm::vec2 TextMesh::updateText(std::span<const char32_t> text, fxed::FontAtlas &font, glm::ivec2 cursorPos,
 							   float lineWidth) {
 	glm::vec2 cursorPosResult = cursorPos;
@@ -79,6 +85,25 @@ glm::vec2 TextMesh::updateText(std::span<const char32_t> text, fxed::FontAtlas &
 			vertexData[4 * j + 2].v = (box.rect.y) / (float)font.getAtlasSize();
 			vertexData[4 * j + 3].u = (box.rect.x + box.rect.w) / (float)font.getAtlasSize();
 			vertexData[4 * j + 3].v = (box.rect.y + box.rect.h) / (float)font.getAtlasSize();
+
+			CharacterDrawMode drawMode = CharacterDrawMode::ALPHA;
+			//if (font.getFontSize() >= 48) {
+			//	drawMode = CharacterDrawMode::MSDF;
+			//} else if (font.getFontSize() >= 24) {
+			//	drawMode = CharacterDrawMode::ALPHA;
+			//}
+
+			if(box.isBitmap) {
+				drawMode = CharacterDrawMode::COLOR;
+			}
+
+			bool drawmodeBit0 = static_cast<int>(drawMode) & 1;
+			bool drawmodeBit1 = static_cast<int>(drawMode) & 2;
+			for (int k = 0; k < 4; k++) {
+				vertexData[4 * j + k].u = std::copysign(vertexData[4 * j + k].u, drawmodeBit0 ? -1.0f : 1.0f);
+				vertexData[4 * j + k].v = std::copysign(vertexData[4 * j + k].v, drawmodeBit1 ? -1.0f : 1.0f);
+			}
+
 			offset += 4;
 			indexCount += 6;
 			++j;
@@ -131,13 +156,13 @@ TextRenderer::TextRenderer(nri::NRI &nri, nri::CommandQueue &queue, fxed::FontAt
 float TextRenderer::getFontSize() const { return static_cast<float>(font.getFontSize()); }
 void  TextRenderer::setFontSize(uint32_t size) { font.resize(size); }
 
-void TextRenderer::renderText(nri::CommandBuffer &cmdBuf, const fxed::TextMesh &textMesh, glm::vec2 cursorPos) {
+void TextRenderer::renderText(nri::CommandBuffer &cmdBuf, const fxed::TextMesh &textMesh, const TextRenderState &renderState) {
 	shader->bind(cmdBuf);
 
-	PushConstants pushConstants{.viewportSize  = this->viewportSize,
-								.translation   = {0, 0},
+	PushConstants pushConstants{.viewportSize  = renderState.viewportSize,
+								.translation   = renderState.translation,
 								.textureHandle = font.getHandle(),
-								.textSize	   = static_cast<float>(font.getFontSize()),
+								.textSize	   = renderState.fontSize,
 								.time		   = 0};
 
 	shader->setPushConstants(cmdBuf, &pushConstants, sizeof(pushConstants), 0);
@@ -145,10 +170,10 @@ void TextRenderer::renderText(nri::CommandBuffer &cmdBuf, const fxed::TextMesh &
 	textMesh.bind(cmdBuf);
 	textMesh.draw(cmdBuf, *shader);
 
-	if (showCursor) {
-		PushConstantsCursor cursorPushConstants{.viewportSize = this->viewportSize,
+	if (renderState.showCursor) {
+		PushConstantsCursor cursorPushConstants{.viewportSize = renderState.viewportSize,
 												.translation  = pushConstants.translation,
-												.cursorPos	  = cursorPos,
+												.cursorPos	  = renderState.cursorPos,
 												.textSize	  = pushConstants.textSize,
 												.time		  = 0};
 

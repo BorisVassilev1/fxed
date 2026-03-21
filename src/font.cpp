@@ -339,10 +339,11 @@ fxed::GlyphBox FontAtlas::getGlyphBox(uint32_t c) {
 		return data->glyphBoxes[it->second].first;
 	} else if (c == U'\t') {
 		auto spaceBox = getGlyphBox(U' ');
-		return GlyphBox{.index	 = -1,
-						.advance = spaceBox.advance * tabSize,
-						.bounds	 = {0, spaceBox.bounds.t, spaceBox.advance * tabSize, spaceBox.bounds.b},
-						.rect	 = {0, 0, 0, 0}};
+		return GlyphBox{.index	  = -1,
+						.advance  = spaceBox.advance * tabSize,
+						.bounds	  = {0, spaceBox.bounds.t, spaceBox.advance * tabSize, spaceBox.bounds.b},
+						.rect	  = {0, 0, 0, 0},
+						.isBitmap = false};
 	} else {
 		auto i = addGlyphToAtlas(c);
 		if (i == -1) { THROW_RUNTIME_ERR(std::format("Glyph '{}' not found in any font in the fallback chain!", c)); }
@@ -406,12 +407,14 @@ std::pair<fxed::GlyphBox, int> FontFallbackChain::getGlyphBox(uint32_t c, uint32
 					  std::hex, e, std::dec);
 				continue;
 			}
+
 			GlyphBox box{.index	  = (int)glyphIndex,
 						 .advance = face->glyph->advance.x / 64.0,
 						 .bounds  = {face->glyph->metrics.horiBearingX / 64.0, face->glyph->metrics.horiBearingY / 64.0,
 									 (face->glyph->metrics.horiBearingX + face->glyph->metrics.width) / 64.0,
 									 (face->glyph->metrics.horiBearingY - face->glyph->metrics.height) / 64.0},
-						 .rect	  = {0, 0, (int)face->glyph->bitmap.width, (int)face->glyph->bitmap.rows}};
+						 .rect	  = {0, 0, (int)face->glyph->bitmap.width, (int)face->glyph->bitmap.rows},
+						 .isBitmap = face->glyph->format == FT_GLYPH_FORMAT_BITMAP};
 
 			return {box, i};
 		}
