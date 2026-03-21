@@ -87,10 +87,8 @@ glm::vec2 TextMesh::updateText(std::span<const char32_t> text, fxed::FontAtlas &
 			vertexData[4 * j + 3].v = (box.rect.y + box.rect.h) / (float)font.getAtlasSize();
 
 			CharacterDrawMode drawMode = CharacterDrawMode::ALPHA;
-			//if (font.getFontSize() >= 48) {
+			//if (font.getFontSize() >= 32) {
 			//	drawMode = CharacterDrawMode::MSDF;
-			//} else if (font.getFontSize() >= 24) {
-			//	drawMode = CharacterDrawMode::ALPHA;
 			//}
 
 			if(box.isBitmap) {

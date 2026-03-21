@@ -2,7 +2,12 @@
 #include <format>
 
 #include <msdf-atlas-gen/msdf-atlas-gen.h>
+#include <msdfgen/ext/import-font.cpp>	   // WHY IS THIS NEEDED?? This is intentional
 
+#include "core/SDFTransformation.h"
+#include "core/generator-config.h"
+#include "ext/import-font.h"
+#include "msdfgen.h"
 #include "nri.hpp"
 #include "packing.hpp"
 #include "utils.hpp"
@@ -49,6 +54,7 @@ class ImageAtlasStorage {
 			data = nullptr;
 		}
 	}
+
 	void put(int x, int y, const msdfgen::BitmapConstRef<float, 4> &subBitmap) {
 		assert(data != nullptr);
 		assert(x + subBitmap.width <= width && y + subBitmap.height <= height);		// FIX BOUNDS CHECK
@@ -62,6 +68,23 @@ class ImageAtlasStorage {
 					subBitmap.pixels[j * subBitmap.width * 4 + i * 4 + 2];
 				((T *)data)[(y + j) * width * N + (x * N) + i * N + 3] =
 					subBitmap.pixels[j * subBitmap.width * 4 + i * 4 + 3];
+			}
+		}
+	}
+
+	void put_flipy(int x, int y, const msdfgen::BitmapConstRef<float, 3> &subBitmap) {
+		assert(data != nullptr);
+		assert(x + subBitmap.width <= width && y + subBitmap.height <= height);		// FIX BOUNDS CHECK
+		for (int _j = 0; _j < subBitmap.height; ++_j) {
+			for (int i = 0; i < subBitmap.width; ++i) {
+				auto j = subBitmap.height - 1 - _j;
+				((T *)data)[(y + _j) * width * N + (x * N) + i * N + 0] =
+					subBitmap.pixels[j * subBitmap.width * 3 + i * 3 + 0];
+				((T *)data)[(y + _j) * width * N + (x * N) + i * N + 1] =
+					subBitmap.pixels[j * subBitmap.width * 3 + i * 3 + 1];
+				((T *)data)[(y + _j) * width * N + (x * N) + i * N + 2] =
+					subBitmap.pixels[j * subBitmap.width * 3 + i * 3 + 2];
+				((T *)data)[(y + _j) * width * N + (x * N) + i * N + 3] = 1.0f;
 			}
 		}
 	}
@@ -232,6 +255,34 @@ int FontAtlas::addGlyphToAtlas(uint32_t c) {
 		box.bounds.r /= fontSize;
 		box.bounds.t /= fontSize;
 		box.advance /= fontSize;
+
+		//if (fontSize == 32u) {
+		//	// use msdfgen
+		//	msdfgen::FontHandle *fontHandle = msdfgen::adoptFreetypeFont(face);
+
+		//	msdfgen::Shape shape;
+		//	double		   advance;
+		//	if (!msdfgen::loadGlyph(shape, fontHandle, c, &advance)) {
+		//		dbLog(dbg::LOG_ERROR, "Failed to load glyph for codepoint ", c, " with msdfgen");
+		//		return -1;
+		//	}
+
+		//	static float				 pixels[32 * 32 * 4];
+		//	msdfgen::BitmapRef<float, 3> bitmap(pixels, box.rect.w, box.rect.h);
+
+		//	msdfgen::Projection		 projection{msdfgen::Vector2(1.f, 1.f), msdfgen::Vector2(0, 0.125)};
+		//	msdfgen::DistanceMapping distanceMapping{msdfgen::Range{0, 1}};
+
+		//	msdfgen::SDFTransformation transformation{projection, distanceMapping};
+
+		//	msdfgen::MSDFGeneratorConfig config;
+
+		//	msdfgen::generateMSDF(bitmap, shape, transformation, config);
+		//	// start from top left corner, but msdfgen generates from bottom left, so flip vertically
+		//	// also adjust box position to account for the flipped bitmap
+		//	data->atlasStorage.put_flipy(box.rect.x, box.rect.y, bitmap);
+		//	return result;
+		//}
 
 		if (face->glyph->format == FT_GLYPH_FORMAT_OUTLINE)
 			if (int e = FT_Render_Glyph(face->glyph, FT_RENDER_MODE_NORMAL)) {
