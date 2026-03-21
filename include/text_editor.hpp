@@ -13,55 +13,27 @@ class TextEditorBase {
 };
 
 class TextEditorController {
-	TextEditorBase								  &editor;
-	std::chrono::high_resolution_clock::time_point lastMoveTime = std::chrono::high_resolution_clock::now();
-	bool										   cursorMoved	= false;
-	bool										   textChanged	= true;
+	TextEditorBase &editor;
 
    public:
 	TextEditorController(TextEditorBase &editor) : editor(editor) {
-		fxed::Keyboard::addCharCallback([this, &editor](GLFWwindow *window, unsigned int codepoint) {
-			editor.insertChar((char32_t)codepoint);
-			lastMoveTime = std::chrono::high_resolution_clock::now();
-			cursorMoved	 = true;
-			textChanged	 = true;
-		});
-		fxed::Keyboard::addKeyCallback(
-			[this, &editor](GLFWwindow *window, int key, int scancode, int action, int mods) {
-				if (action == GLFW_PRESS || action == GLFW_REPEAT) {
-					if (key == GLFW_KEY_BACKSPACE) {
-						editor.deleteChar();
-						textChanged = true;
-					} else if (key == GLFW_KEY_ENTER) {
-						editor.insertChar('\n');
-						textChanged = true;
-					} else if (key == GLFW_KEY_TAB) {
-						editor.insertChar('\t');
-						textChanged = true;
-					} else if (key == GLFW_KEY_LEFT) {
-						editor.moveCursor(-1, 0);
-					} else if (key == GLFW_KEY_RIGHT) {
-						editor.moveCursor(1, 0);
-					} else if (key == GLFW_KEY_UP) {
-						editor.moveCursor(0, -1);
-					} else if (key == GLFW_KEY_DOWN) {
-						editor.moveCursor(0, 1);
-					}
-					lastMoveTime = std::chrono::high_resolution_clock::now();
-					cursorMoved	 = true;
+		fxed::Keyboard::addCharCallback(
+			[this](GLFWwindow *, unsigned int codepoint) { this->editor.insertChar((char32_t)codepoint); });
+		fxed::Keyboard::addKeyCallback([this](GLFWwindow *, int key, int, int action, int) {
+			if (action == GLFW_PRESS || action == GLFW_REPEAT) {
+				switch (key) {
+					case GLFW_KEY_BACKSPACE: this->editor.deleteChar(); break;
+					case GLFW_KEY_ENTER: this->editor.insertChar('\n'); break;
+					case GLFW_KEY_TAB: this->editor.insertChar('\t'); break;
+					case GLFW_KEY_LEFT: this->editor.moveCursor(-1, 0); break;
+					case GLFW_KEY_RIGHT: this->editor.moveCursor(1, 0); break;
+					case GLFW_KEY_UP: this->editor.moveCursor(0, -1); break;
+					case GLFW_KEY_DOWN: this->editor.moveCursor(0, 1); break;
+					default: break;
 				}
-			});
+			}
+		});
 	}
-
-	size_t milisecondsSinceLastMove() const {
-		auto now = std::chrono::high_resolution_clock::now();
-		return std::chrono::duration_cast<std::chrono::milliseconds>(now - lastMoveTime).count();
-	}
-
-	bool hasCursorMoved() const { return cursorMoved; }
-	bool hasTextChanged() const { return textChanged; }
-	void resetCursorMoved() { cursorMoved = false; }
-	void resetTextChanged() { textChanged = false; }
 };
 
 class TextEditor : public TextEditorBase {
@@ -78,6 +50,10 @@ class TextEditor : public TextEditorBase {
 		return offset;
 	}
 
+	bool										   cursorMoved	= false;
+	bool										   textChanged	= true;
+	std::chrono::high_resolution_clock::time_point lastMoveTime = std::chrono::high_resolution_clock::now();
+
    public:
 	TextEditor() { lines.emplace_back(); }
 	TextEditor(std::u32string_view text) {
@@ -93,6 +69,9 @@ class TextEditor : public TextEditorBase {
 			}
 		}
 		if (lines.empty()) { lines.emplace_back(); }
+		textChanged	 = true;
+		lastMoveTime = std::chrono::high_resolution_clock::now();
+		cursorMoved	 = true;
 	}
 
 	void insertChar(char32_t c) override {
@@ -106,7 +85,10 @@ class TextEditor : public TextEditorBase {
 			lines[cursorPos.y].insert(lines[cursorPos.y].begin() + cursorPos.x, c);
 			cursorPos.x++;
 		}
-		currentMax = measureLineOffset(cursorPos.y, cursorPos.x);
+		currentMax	 = measureLineOffset(cursorPos.y, cursorPos.x);
+		cursorMoved	 = true;
+		lastMoveTime = std::chrono::high_resolution_clock::now();
+		textChanged	 = true;
 	}
 
 	void deleteChar() override {
@@ -119,7 +101,10 @@ class TextEditor : public TextEditorBase {
 			lines.erase(lines.begin() + cursorPos.y);
 			cursorPos.y--;
 		}
-		currentMax = measureLineOffset(cursorPos.y, cursorPos.x);
+		currentMax	 = measureLineOffset(cursorPos.y, cursorPos.x);
+		cursorMoved	 = true;
+		lastMoveTime = std::chrono::high_resolution_clock::now();
+		textChanged	 = true;
 	}
 
 	void moveCursor(int dx, int dy) override {
@@ -139,7 +124,9 @@ class TextEditor : public TextEditorBase {
 			newCursorX--;
 			currentMax = measureLineOffset(cursorPos.y, newCursorX);
 		}
-		cursorPos.x = std::clamp(newCursorX, 0, (int32_t)lines[cursorPos.y].size());
+		cursorPos.x	 = std::clamp(newCursorX, 0, (int32_t)lines[cursorPos.y].size());
+		cursorMoved	 = true;
+		lastMoveTime = std::chrono::high_resolution_clock::now();
 	}
 
 	std::u32string getText() const override {
@@ -153,7 +140,20 @@ class TextEditor : public TextEditorBase {
 	glm::ivec2 getCursorPos() const { return cursorPos; }
 
 	void setCursorPos(glm::ivec2 pos) {
-		cursorPos.y = std::clamp(pos.y, 0, (int32_t)lines.size() - 1);
-		cursorPos.x = std::clamp(pos.x, 0, (int32_t)lines[cursorPos.y].size());
+		cursorPos.y	 = std::clamp(pos.y, 0, (int32_t)lines.size() - 1);
+		cursorPos.x	 = std::clamp(pos.x, 0, (int32_t)lines[cursorPos.y].size());
+		currentMax	 = measureLineOffset(cursorPos.y, cursorPos.x);
+		lastMoveTime = std::chrono::high_resolution_clock::now();
+		cursorMoved	 = true;
+	}
+
+	bool hasCursorMoved() const { return cursorMoved; }
+	bool hasTextChanged() const { return textChanged; }
+	void resetCursorMoved() { cursorMoved = false; }
+	void resetTextChanged() { textChanged = false; }
+
+	size_t milisecondsSinceLastMove() const {
+		auto now = std::chrono::high_resolution_clock::now();
+		return std::chrono::duration_cast<std::chrono::milliseconds>(now - lastMoveTime).count();
 	}
 };

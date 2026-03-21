@@ -960,14 +960,13 @@ void VulkanWindow::createSwapChain(uint32_t &width, uint32_t &height) {
 	VkResult				   res = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(nri.getPhysicalDevice(), *surface,
 																			   (VkSurfaceCapabilitiesKHR *)&capabilities);
 	if (res != VK_SUCCESS) {
-		if (swapChain) vkDestroySwapchainKHR(nri.getDevice(), swapChain, nullptr);
+		if(swapChain) vkb::destroy_swapchain(swapChain);
 		swapChain = vkb::Swapchain();
 		return;
 	}
 
 	width  = capabilities.maxImageExtent.width;
 	height = capabilities.maxImageExtent.height;
-	dbLog(dbg::LOG_INFO, "Creating swapchain for window with size ", width, "x", height);
 
 	vkb::SwapchainBuilder swapchainBuilder{nri.getPhysicalDevice(), nri.getDevice(), *surface};
 	swapchainBuilder.set_desired_present_mode((VkPresentModeKHR)vk::PresentModeKHR::eFifo);

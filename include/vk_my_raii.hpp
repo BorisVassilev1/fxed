@@ -13,7 +13,7 @@ class SurfaceKHR {
    public:
 	void clear() {
 		if (surface) {
-			dbLog(dbg::LOG_INFO, "Destroying surface ", (void *)surface);
+			dbLog(dbg::LOG_DEBUG, "Destroying surface ", (void *)surface);
 			vkDestroySurfaceKHR(instance, surface, nullptr);
 			surface = nullptr;
 		}
@@ -150,7 +150,7 @@ class DescriptorPool {
    public:
 	void clear() {
 		if (descriptorPool) {
-			dbLog(dbg::LOG_INFO, "Destroying descriptor pool ", (void *)descriptorPool);
+			dbLog(dbg::LOG_DEBUG, "Destroying descriptor pool ", (void *)descriptorPool);
 			vkDestroyDescriptorPool(device, descriptorPool, nullptr);
 			descriptorPool = nullptr;
 		}
@@ -187,7 +187,7 @@ class DescriptorSetLayout {
    public:
 	void clear() {
 		if (descriptorSetLayout) {
-			dbLog(dbg::LOG_INFO, "Destroying descriptor set layout ", (void *)descriptorSetLayout);
+			dbLog(dbg::LOG_DEBUG, "Destroying descriptor set layout ", (void *)descriptorSetLayout);
 			vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
 			descriptorSetLayout = nullptr;
 		}

@@ -124,6 +124,7 @@ void Window::handleResize(GLFWwindow *window, int width, int height) {
 }
 
 void Window::addResizeCallback(const std::function<void(GLFWwindow *, int, int)> &callback) {
+	callback(window, width, height);
 	resizeCallbacks.push_back(callback);
 }
 

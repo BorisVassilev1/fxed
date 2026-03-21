@@ -4,6 +4,7 @@
 #include <ranges>
 #include <string>
 #include <istream>
+#include <iostream>
 
 namespace fxed {
 
@@ -223,7 +224,7 @@ class ToUtf8 : public std::ranges::view_interface<ToUtf8<R>> {
 
 		char	  operator*() const { return c[4 - bytesToWrite]; }
 		iterator &operator++() {
-			if (bytesToWrite > 0) {
+			if (bytesToWrite > 1) {
 				bytesToWrite--;
 			} else {
 				writeCodepoint();
@@ -231,7 +232,7 @@ class ToUtf8 : public std::ranges::view_interface<ToUtf8<R>> {
 			return *this;
 		}
 		void operator++(int) {
-			if (bytesToWrite > 0) {
+			if (bytesToWrite > 1) {
 				bytesToWrite--;
 			} else {
 				writeCodepoint();

@@ -13,22 +13,6 @@
 #include "utf8_convert.hpp"
 #include "pane.hpp"
 
-struct PushConstants {
-	glm::ivec2			viewportSize;
-	glm::ivec2			translation = {0, 0};
-	nri::ResourceHandle textureHandle;
-	float				textSize;
-	float				time;
-};
-
-struct PushConstantsCursor {
-	glm::ivec2 viewportSize;
-	glm::ivec2 translation = {0, 0};
-	glm::vec2  cursorPos;
-	float	   textSize;
-	float	   time;
-};
-
 int main(int argc, char *argv[]) {
 	// 🚀 asd
 	// 🐊
@@ -39,7 +23,8 @@ int main(int argc, char *argv[]) {
 	// 🔔 asd
 	fxed::Window window(*nri, 800, 600, "Vulkan NRI Window");
 
-	glfwSetWindowAttrib(window.getHandle(), GLFW_DECORATED, !glfwGetWindowAttrib(window.getHandle(), GLFW_DECORATED));
+	// glfwSetWindowAttrib(window.getHandle(), GLFW_DECORATED, !glfwGetWindowAttrib(window.getHandle(),
+	// GLFW_DECORATED));
 	auto &win		= window.getNativeWindow();
 	win->clearColor = glm::vec4(30 / 255.f, 30 / 255.f, 46 / 255.f, 1.0f);
 
@@ -52,14 +37,8 @@ int main(int argc, char *argv[]) {
 		fxed::FontAtlas::findFontPath("Noto Color Emoji"),	   // fallback for emojis
 	});
 
-	fxed::TextRenderer	  textRenderer(*nri, window.getMainQueue(),
-									   fxed::FontAtlas(*nri, window.getMainQueue(), std::move(fallbackChain), 512, 20));
-	fxed::TextRenderState textRenderState{
-		.translation  = {0, 0},
-		.viewportSize = {window.getWidth(), window.getHeight()},
-		.cursorPos	  = {0, 0},
-		.showCursor	  = true,
-	};
+	fxed::TextRenderer textRenderer(*nri, window.getMainQueue(),
+									fxed::FontAtlas(*nri, window.getMainQueue(), std::move(fallbackChain), 512, 20));
 
 	// load argv[1] if exists
 	std::u32string text;
@@ -71,22 +50,16 @@ int main(int argc, char *argv[]) {
 
 			file.close();
 		} else {
-			dbLog(dbg::LOG_ERROR, "Failed to open file: %s", argv[1]);
+			dbLog(dbg::LOG_ERROR, "Failed to open file: ", argv[1]);
 		}
 	}
 
-	// std::ranges::copy(text | fxed::to_utf8, std::ostream_iterator<char>(std::cout));
+	fxed::TextEditorPane pane(*nri, window.getMainQueue(), window.getWidth(), window.getHeight(), textRenderer,
+							  TextEditor(text));
 
-	auto				 textMesh = fxed::TextMesh(*nri, window.getMainQueue(), 10000);
-	TextEditor			 textEditor(text);
-	TextEditorController textEditorController(textEditor);
+	TextEditorController editorController(pane.getEditor());
 
-	auto cursorMesh = std::make_unique<fxed::QuadMesh>(*nri, window.getMainQueue(), glm::vec2(0.1, 1.0f));
-
-	auto resizeCallback = [&](GLFWwindow *, int w, int h) { textRenderState.viewportSize = {w, h}; };
-	resizeCallback(nullptr, window.getWidth(), window.getHeight());
-
-	window.addResizeCallback(resizeCallback);
+	window.addResizeCallback([&](GLFWwindow *, int w, int h) { pane.resize(w, h); });
 
 	fxed::Keyboard::addKeyCallback([&](GLFWwindow *, int key, int, int action, int mods) {
 		// zoom with ctrl + +/-
@@ -98,6 +71,16 @@ int main(int argc, char *argv[]) {
 					auto fontSize = textRenderer.getFontSize();
 					fontSize	  = std::max(2.f, fontSize - 1);
 					textRenderer.setFontSize(fontSize);
+				} else if (key == GLFW_KEY_S) {
+					std::ofstream file(argv[1] ? argv[1] : "output.txt");
+					if (file.is_open()) {
+						std::u32string text = pane.getEditor().getText();
+						std::ranges::copy(text | fxed::to_utf8, std::ostream_iterator<char>(std::cout));
+						std::ranges::copy(text | fxed::to_utf8, std::ostream_iterator<char>(file));
+						dbLog(dbg::LOG_INFO, "Saved text to output.txt");
+					} else {
+						dbLog(dbg::LOG_ERROR, "Failed to open output.txt for writing");
+					}
 				}
 			}
 		}
@@ -110,11 +93,9 @@ int main(int argc, char *argv[]) {
 			fontSize = std::max(2.f, fontSize);
 			textRenderer.setFontSize(fontSize);
 		} else {
-			textRenderState.translation.y += std::copysign(1.f, yOffset) * 1.0f;
+			pane.scroll(0, std::copysign(1.f, yOffset) * 1.0f);
 		}
 	});
-
-	fxed::Pane pane(*nri, window.getMainQueue());
 
 	while (!window.shouldClose()) {
 		window.beginFrame();
@@ -129,31 +110,9 @@ int main(int argc, char *argv[]) {
 
 		pane.render(cmdBuf);
 
-		std::u32string text			 = textEditor.getText();
-		glm::vec2	  &cursorRealPos = textRenderState.cursorPos;
-		textRenderer.getFont().syncWithGPU();
-		if (textEditorController.hasTextChanged())
-			cursorRealPos = textMesh.updateText(std::span<const char32_t>{text.begin(), text.end()},
-												textRenderer.getFont(), textEditor.getCursorPos(), window.getWidth());
-
-		if (textEditorController.hasCursorMoved()) {
-			glm::vec2 screenBounds = glm::vec2(textRenderState.viewportSize) / textRenderer.getFontSize();
-			// clamp translation to prevent moving text out of screen
-			textRenderState.translation.x = std::clamp<float>(textRenderState.translation.x, -cursorRealPos.x,
-															  screenBounds.x - cursorRealPos.x - 1);
-			textRenderState.translation.y = std::clamp<float>(textRenderState.translation.y, -cursorRealPos.y + 1,
-															  screenBounds.y - cursorRealPos.y - 1);
-		}
-		auto time = glfwGetTime();
-		textRenderState.showCursor =
-			textEditorController.milisecondsSinceLastMove() < 200 || (time - int64_t(time)) < 0.5;
-
-		textRenderer.renderText(cmdBuf, textMesh, textRenderState);
-
 		win->endRendering(cmdBuf);
 		win->endFrame();
 
-		textEditorController.resetCursorMoved();
 		window.swapBuffers();
 	}
 
