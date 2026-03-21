@@ -26,7 +26,7 @@ glm::vec2 TextMesh::updateText(std::span<const char32_t> text, fxed::FontAtlas &
 	double	  advanceDX		  = 0.0;
 
 	double lineWidthChars = lineWidth > 0 ? std::floor(lineWidth / font.getFontSize()) : 0;
-	double lineHeight	  = 1.0;
+	double lineHeight	  = 1.2;
 
 	size_t j = 0;
 	for (size_t i = 0; i < text.size(); i++) {

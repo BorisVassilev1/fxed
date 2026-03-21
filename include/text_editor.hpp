@@ -117,4 +117,9 @@ class TextEditor : public TextEditorBase {
 	}
 
 	glm::ivec2 getCursorPos() const { return cursorPos; }
+
+	void setCursorPos(glm::ivec2 pos) {
+		cursorPos.y = std::clamp(pos.y, 0, (int32_t)lines.size() - 1);
+		cursorPos.x = std::clamp(pos.x, 0, (int32_t)lines[cursorPos.y].size());
+	}
 };

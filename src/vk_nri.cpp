@@ -165,11 +165,6 @@ static VkFormat nriFormat2vkFormat[] = {
 
 std::pair<const char *, bool> extensions[] = {
 	{"VK_KHR_surface", true},
-#ifdef __linux__
-	//{"VK_KHR_xlib_surface", true}, {"VK_KHR_wayland_surface", false}, {"VK_KHR_xcb_surface", false},
-#elif defined(_WIN32)
-	//{"VK_KHR_win32_surface", true},
-#endif
 	{"VK_EXT_debug_utils", false},
 };
 
@@ -984,14 +979,16 @@ void VulkanWindow::createSwapChain(uint32_t &width, uint32_t &height) {
 	swapchainBuilder.set_image_usage_flags(
 		VkImageUsageFlags(vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferDst));
 	swapchainBuilder.set_pre_transform_flags(VkSurfaceTransformFlagBitsKHR(vk::SurfaceTransformFlagBitsKHR::eIdentity));
+	if (swapChain) vkDestroySwapchainKHR(nri.getDevice(), swapChain, nullptr);
 
 	auto swapchainResult = swapchainBuilder.build();
 	if (!swapchainResult.has_value()) {
 		dbLog(dbg::LOG_ERROR, "Failed to create swapchain: ", swapchainResult.error().message());
-		if (swapChain) vkDestroySwapchainKHR(nri.getDevice(), swapChain, nullptr);
+		this->swapChainImages.clear();
 		swapChain = vkb::Swapchain();
 		return;
 	}
+
 	swapChain = std::move(swapchainResult.value());
 
 	this->swapChainImages.clear();
