@@ -960,7 +960,7 @@ void VulkanWindow::createSwapChain(uint32_t &width, uint32_t &height) {
 	VkResult				   res = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(nri.getPhysicalDevice(), *surface,
 																			   (VkSurfaceCapabilitiesKHR *)&capabilities);
 	if (res != VK_SUCCESS) {
-		if(swapChain) vkb::destroy_swapchain(swapChain);
+		if (swapChain) vkb::destroy_swapchain(swapChain);
 		swapChain = vkb::Swapchain();
 		return;
 	}
@@ -1303,8 +1303,8 @@ std::unique_ptr<GraphicsProgram> VulkanProgramBuilder::buildGraphicsProgram() {
 	assert(int(vkTopology) != -1);
 	vk::PipelineInputAssemblyStateCreateInfo inputAssemblyInfo({}, vkTopology, VK_FALSE);
 
-	vk::Viewport						viewport(0.0f, 0.0f, 800.0f, 600.0f, 0.0f, 1.0f);
-	vk::Rect2D							scissor({0, 0}, {800, 600});
+	vk::Viewport viewport(0.0f, 0.0f, 800.0f, 600.0f, 0.0f, 1.0f);
+	vk::Rect2D	 scissor({0, 0}, {800, 600});	  // does not matter, we change it dynamically anyways
 	vk::PipelineViewportStateCreateInfo viewportStateInfo({}, 1, &viewport, 1, &scissor);
 
 	vk::PipelineRasterizationStateCreateInfo rasterizerInfo({}, VK_FALSE, VK_FALSE, vk::PolygonMode::eFill,
@@ -1488,6 +1488,32 @@ CommandQueue::SubmitKey VulkanCommandQueue::submit(CommandBuffer &commandBuffer)
 void VulkanCommandQueue::wait(SubmitKey key) {
 	static_cast<void>(key);		// TODO: fix this
 	vkQueueWaitIdle(queue);
+}
+
+void VulkanCommandBuffer::begin() {
+	if (!isRecording) {
+		vk::CommandBufferBeginInfo beginInfo;
+		vkBeginCommandBuffer(commandBuffer, (VkCommandBufferBeginInfo *)&beginInfo);
+		isRecording = true;
+	}
+}
+
+void VulkanCommandBuffer::end() {
+	if (isRecording) {
+		vkEndCommandBuffer(commandBuffer);
+		isRecording = false;
+	}
+}
+
+void VulkanCommandBuffer::setViewport(float x, float y, float width, float height, float minDepth, float maxDepth) {
+	begin();
+	vk::Viewport viewport(x, y, width, height, minDepth, maxDepth);
+	vkCmdSetViewport(commandBuffer, 0, 1, (VkViewport *)&viewport);
+}
+void VulkanCommandBuffer::setScissor(int32_t x, int32_t y, uint32_t width, uint32_t height) {
+	begin();
+	vk::Rect2D scissor({x, y}, {width, height});
+	vkCmdSetScissor(commandBuffer, 0, 1, (VkRect2D *)&scissor);
 }
 
 static int __asd = []() {

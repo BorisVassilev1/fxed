@@ -11,8 +11,7 @@ struct PushConstants {
 fxed::ResourceID fxed::Pane::backgroundShaderID = fxed::ResourceID::invalid();
 fxed::ResourceID fxed::Pane::backgroundMeshID	= fxed::ResourceID::invalid();
 
-fxed::Pane::Pane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width, uint32_t height)
-	: width(width), height(height) {
+fxed::Pane::Pane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width, uint32_t height) : size(width, height) {
 	if (backgroundShaderID.invalid()) {
 		auto sb = nri.createProgramBuilder();
 		auto backgroundShader =
@@ -42,10 +41,12 @@ void fxed::Pane::render(nri::CommandBuffer &cmdBuf) {
 		.borderSize	  = 2,
 		.color1		  = glm::vec3(1.0f, 1.0f, 1.0f),
 		.time		  = 0,
-		.viewportSize = {width, height},
+		.viewportSize = size,
 	};
 
 	backgroundShader.setPushConstants(cmdBuf, &pushConstants, sizeof(pushConstants), 0);
+	cmdBuf.setViewport(position.x, position.y, size.x, size.y, 0.0f, 1.0f);
+	cmdBuf.setScissor(position.x, position.y, size.x, size.y);
 
 	backgroundMesh.draw(cmdBuf, backgroundShader);
 }
@@ -53,12 +54,14 @@ void fxed::Pane::render(nri::CommandBuffer &cmdBuf) {
 fxed::Pane *fxed::Pane::activePane;
 fxed::Pane *fxed::Pane::getActivePane() { return activePane; }
 
-uint32_t fxed::Pane::getWidth() const { return width; }
-uint32_t fxed::Pane::getHeight() const { return height; }
+uint32_t fxed::Pane::getWidth() const { return size.x; }
+uint32_t fxed::Pane::getHeight() const { return size.y; }
 
-void fxed::Pane::resize(uint32_t newWidth, uint32_t newHeight) {
-	width  = newWidth;
-	height = newHeight;
+void fxed::Pane::resize(uint32_t newWidth, uint32_t newHeight) { size = {newWidth, newHeight}; }
+
+void fxed::Pane::setTransform(uint32_t posX, uint32_t posY, uint32_t width, uint32_t height) {
+	position = {posX, posY};
+	size	 = {width, height};
 }
 
 void fxed::Pane::scroll(int, int) {}
@@ -66,7 +69,7 @@ void fxed::Pane::scroll(int, int) {}
 fxed::TextPane::TextPane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width, uint32_t height,
 						 TextRenderer &textRenderer)
 	: Pane(nri, queue, width, height), textRenderer(textRenderer), textMesh(nri, queue, 10000) {
-	renderState.viewportSize = {800, 600};
+	renderState.viewportSize = {width, height};
 }
 
 void fxed::TextPane::render(nri::CommandBuffer &cmdBuf) {
@@ -79,6 +82,11 @@ void fxed::TextPane::resize(uint32_t newWidth, uint32_t newHeight) {
 	Pane::resize(newWidth, newHeight);
 	renderState.viewportSize = {newWidth, newHeight};
 };
+
+void fxed::TextPane::setTransform(uint32_t posX, uint32_t posY, uint32_t width, uint32_t height) {
+	Pane::setTransform(posX, posY, width, height);
+	renderState.viewportSize = {width, height};
+}
 
 fxed::TextEditorPane::TextEditorPane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width, uint32_t height,
 									 TextRenderer &textRenderer, TextEditor &&editor)

@@ -240,22 +240,13 @@ class VulkanCommandBuffer : public CommandBuffer {
 	vkraii::CommandBuffer commandBuffer;
 	bool				  isRecording;
 
-	void begin() override {
-		if (!isRecording) {
-			vk::CommandBufferBeginInfo beginInfo;
-			vkBeginCommandBuffer(commandBuffer, (VkCommandBufferBeginInfo *)&beginInfo);
-			isRecording = true;
-		}
-	}
-
-	void end() override {
-		if (isRecording) {
-			vkEndCommandBuffer(commandBuffer);
-			isRecording = false;
-		}
-	}
+	void begin() override;
+	void end() override;
 
 	VulkanCommandBuffer(vkraii::CommandBuffer &&cmdBuf) : commandBuffer(std::move(cmdBuf)), isRecording(false) {}
+
+	void setViewport(float x, float y, float width, float height, float minDepth, float maxDepth) override;
+	void setScissor(int32_t x, int32_t y, uint32_t width, uint32_t height) override;
 };
 
 class VulkanProgramBuilder : public ProgramBuilder {
