@@ -22,7 +22,7 @@ class TextMesh : public fxed::Mesh {
 };
 
 struct TextRenderState {
-	glm::ivec2 translation{0, 0};
+	glm::vec2 translation{0, 0};
 	glm::ivec2 viewportSize;
 	glm::vec2  cursorPos;
 	bool	   showCursor = true;
@@ -33,12 +33,14 @@ class TextRenderer {
 	static ResourceID		cursorMeshID;
 	static ResourceID		shaderID;
 	static ResourceID		cursorShaderID;
+	uint32_t				version;
 	float fontSize;
 
    public:
 	fxed::FontAtlas &getFont() { return font; }
 	float			 getFontSize() const;
 	void			 setFontSize(uint32_t size);
+	uint32_t		 getVersion() const { return version; }
 
 	TextRenderer(nri::NRI &nri, nri::CommandQueue &queue, fxed::FontAtlas &&font);
 	DELETE_COPY_AND_ASSIGNMENT(TextRenderer);

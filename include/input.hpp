@@ -18,9 +18,11 @@ class Mouse {
 
 	static std::vector<std::function<void(GLFWwindow *, double, double)>> scrollCallbacks;
 	static std::vector<std::function<void(GLFWwindow *, int, int, int)>> mouseButtonCallbacks;
+	static std::vector<std::function<void(GLFWwindow *, double, double)>> mouseMoveCallbacks;
 
 	static void handleScroll(GLFWwindow *, double, double);
 	static void handleMouseButton(GLFWwindow *, int, int, int);
+	static void handleMouseMove(GLFWwindow *, double, double);
 
    public:
 	bool visible						 = false;	  ///< is mouse visible
@@ -58,6 +60,7 @@ class Mouse {
 
 	static void addScrollCallback(const std::function<void(GLFWwindow *, double, double)> &callback);
 	static void addMouseButtonCallback(const std::function<void(GLFWwindow *, int, int, int)> &callback);
+	static void addMouseMoveCallback(const std::function<void(GLFWwindow *, double, double)> &callback);
 };
 
 // keyboard will always have the same behaviour with all windows

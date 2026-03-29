@@ -11,14 +11,31 @@ Mouse::Mouse(Window &window, bool lock) : delta(0), window(window), lock(lock) {
 	glfwSetCursorPos(window.getHandle(), position.x, position.y);
 	glfwSetScrollCallback(window.getHandle(), handleScroll);
 	glfwSetMouseButtonCallback(window.getHandle(), handleMouseButton);
+	glfwSetCursorPosCallback(window.getHandle(), handleMouseMove);
 
 	update();
 }
 
-Mouse::Mouse(Window &window) : Mouse(window, false) {}
+Mouse::Mouse(Window &window) : Mouse(window, false) {
+	addMouseMoveCallback([this](GLFWwindow *window, double, double) {
+		glm::dvec2 newPos;
+		glfwGetCursorPos(this->window.getHandle(), &newPos.x, &newPos.y);
+
+		delta = newPos - position;
+
+		position = newPos;
+
+		if (lock && !disableMouseWhenLockedAndHidden) {
+			position.x = this->window.getWidth() / 2;
+			position.y = this->window.getHeight() / 2;
+			glfwSetCursorPos(this->window.getHandle(), position.x, position.y);
+		}
+	});
+}
 
 std::vector<std::function<void(GLFWwindow *, double, double)>> Mouse::scrollCallbacks;
 std::vector<std::function<void(GLFWwindow *, int, int, int)>>  Mouse::mouseButtonCallbacks;
+std::vector<std::function<void(GLFWwindow *, double, double)>> Mouse::mouseMoveCallbacks;
 
 void Mouse::handleScroll(GLFWwindow *window, double xoffset, double yoffset) {
 	for (auto fun : scrollCallbacks) {
@@ -32,21 +49,13 @@ void Mouse::handleMouseButton(GLFWwindow *window, int button, int action, int mo
 	}
 }
 
-void Mouse::update() {
-	glm::dvec2 newPos;
-
-	glfwGetCursorPos(window.getHandle(), &newPos.x, &newPos.y);
-
-	delta = newPos - position;
-
-	position = newPos;
-
-	if (lock && !disableMouseWhenLockedAndHidden) {
-		position.x = window.getWidth() / 2;
-		position.y = window.getHeight() / 2;
-		glfwSetCursorPos(window.getHandle(), position.x, position.y);
+void Mouse::handleMouseMove(GLFWwindow *window, double xpos, double ypos) {
+	for (auto fun : mouseMoveCallbacks) {
+		fun(window, xpos, ypos);
 	}
 }
+
+void Mouse::update() {}
 
 void Mouse::hide() {
 	if (lock && disableMouseWhenLockedAndHidden) {
@@ -71,6 +80,10 @@ void Mouse::addScrollCallback(const std::function<void(GLFWwindow *, double, dou
 }
 void Mouse::addMouseButtonCallback(const std::function<void(GLFWwindow *, int, int, int)> &callback) {
 	mouseButtonCallbacks.push_back(callback);
+}
+
+void Mouse::addMouseMoveCallback(const std::function<void(GLFWwindow *, double, double)> &callback) {
+	mouseMoveCallbacks.push_back(callback);
 }
 
 void Keyboard::init(Window *window) {

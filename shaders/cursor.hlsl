@@ -15,7 +15,7 @@ struct VSOutput
 struct PushConstantsCursor
 {
 	int2 viewportSize;
-	int2 translation;
+	float2 translation;
 	float2 cursorPosition;
 	float textSize;
 	float time;

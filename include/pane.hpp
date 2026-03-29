@@ -15,6 +15,7 @@ class Pane {
 
 	glm::ivec2 position;
 	glm::ivec2 size;
+	int borderSize = 2;
 
    public:
 	Pane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width = 800, uint32_t height = 600);
@@ -27,25 +28,32 @@ class Pane {
 
 	uint32_t getWidth() const;
 	uint32_t getHeight() const;
+	void setActive();
+	bool containsPoint(glm::ivec2 point) const;
 
 	virtual void resize(uint32_t newWidth, uint32_t newHeight);
 	virtual void setTransform(uint32_t posX, uint32_t posY, uint32_t width, uint32_t height);
-	virtual void scroll(int deltaX, int deltaY);
+	virtual void scroll(fxed::Mouse &mouse, int deltaX, int deltaY);
+	virtual void mouseClick(fxed::Mouse &mouse, int button, int action, int mods);
+	virtual void mouseMove(fxed::Mouse &mouse, double deltaX, double deltaY);
 };
 
 class TextPane : public Pane {
    protected:
 	TextRenderer   &textRenderer;
+	uint32_t textRendererVersion;
 	TextRenderState renderState;
 	TextMesh		textMesh;
+	std::u32string		text;
 
    public:
 	TextPane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width, uint32_t height, TextRenderer &textRenderer);
 	void render(nri::CommandBuffer &cmdBuf) override;
 
-	void scroll(int deltaX, int deltaY) override;
+	void scroll(fxed::Mouse &mouse, int deltaX, int deltaY) override;
 	void resize(uint32_t newWidth, uint32_t newHeight) override;
 	void setTransform(uint32_t posX, uint32_t posY, uint32_t width, uint32_t height) override;
+	void updateText(const std::u32string &text);
 };
 
 class TextEditorPane : public TextPane {
@@ -66,7 +74,9 @@ class SplitPane : public Pane {
 	std::shared_ptr<Pane> child2;
 	bool				  isVertical;	  // true for vertical split, false for horizontal split
 	float				  splitRatio;	  // between 0 and 1
-
+	
+	bool isDragging = false;
+	
    public:
 	SplitPane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width, uint32_t height, bool isVertical = true,
 			  float splitRatio = 0.5f);
@@ -74,8 +84,12 @@ class SplitPane : public Pane {
 
 	void resize(uint32_t newWidth, uint32_t newHeight) override;
 	void setTransform(uint32_t posX, uint32_t posY, uint32_t width, uint32_t height) override;
+	void mouseClick(fxed::Mouse &mouse, int button, int action, int mods) override;
+	void mouseMove(fxed::Mouse &mouse, double deltaX, double deltaY) override;
+	void scroll(fxed::Mouse &mouse, int deltaX, int deltaY) override;
 
 	void setSplitRatio(float ratio);
+	void setVertical(bool isVertical);
 	void setChild(std::shared_ptr<Pane> &&child, int index);
 };
 

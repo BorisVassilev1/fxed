@@ -17,7 +17,7 @@ struct VSOutput
 struct PushConstants
 {
 	int2 viewportSize;
-	int2 translation;
+	float2 translation;
 	TextureHandle texture;
 	float textSize;
 	float time;

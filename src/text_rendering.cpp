@@ -52,7 +52,7 @@ glm::vec2 TextMesh::updateText(std::span<const char32_t> text, fxed::FontAtlas &
 		}
 
 		auto box = font.getGlyphBox(text[i]);
-		if (lineWidth > 0 && advanceDX + box.advance >= lineWidthChars) {
+		if (lineWidth > 0 && advanceDX + box.advance >= lineWidth / font.getFontSize()) {
 			advanceDY += lineHeight;
 			advanceDX = 0.0;
 		}
@@ -113,7 +113,7 @@ glm::vec2 TextMesh::updateText(std::span<const char32_t> text, fxed::FontAtlas &
 
 struct PushConstants {
 	glm::ivec2			viewportSize;
-	glm::ivec2			translation = {0, 0};
+	glm::vec2			translation = {0, 0};
 	nri::ResourceHandle textureHandle;
 	float				textSize;
 	float				time;
@@ -121,7 +121,7 @@ struct PushConstants {
 
 struct PushConstantsCursor {
 	glm::ivec2 viewportSize;
-	glm::ivec2 translation = {0, 0};
+	glm::vec2  translation = {0, 0};
 	glm::vec2  cursorPos;
 	float	   textSize;
 	float	   time;
@@ -163,9 +163,11 @@ TextRenderer::TextRenderer(nri::NRI &nri, nri::CommandQueue &queue, fxed::FontAt
 }
 
 float TextRenderer::getFontSize() const { return fontSize; }
-void  TextRenderer::setFontSize(uint32_t size) {
-	 fontSize = static_cast<float>(size);
-	 font.resize(size);
+
+void TextRenderer::setFontSize(uint32_t size) {
+	fontSize = static_cast<float>(size);
+	font.resize(size);
+	version++;
 }
 
 void TextRenderer::renderText(nri::CommandBuffer &cmdBuf, const fxed::TextMesh &textMesh,
@@ -174,7 +176,7 @@ void TextRenderer::renderText(nri::CommandBuffer &cmdBuf, const fxed::TextMesh &
 	shader.bind(cmdBuf);
 
 	PushConstants pushConstants{.viewportSize  = renderState.viewportSize,
-								.translation   = renderState.translation + glm::ivec2(1, 0),
+								.translation   = renderState.translation,
 								.textureHandle = font.getHandle(),
 								.textSize	   = fontSize,
 								.time		   = 0};

@@ -59,9 +59,15 @@ int main(int argc, char *argv[]) {
 
 	TextEditorController editorController(pane->getEditor());
 
+	std::shared_ptr<fxed::TextPane> textPane = std::make_unique<fxed::TextPane>(
+		*nri, window.getMainQueue(), window.getWidth(), window.getHeight(), textRenderer);
+	textPane->updateText(
+		U"This is a text pane. It can be used to display text, but it cannot be edited. You can use the mouse wheel to "
+		"scroll and ctrl + +/- to change the font size.");
+
 	fxed::SplitPane splitPane(*nri, window.getMainQueue(), window.getWidth(), window.getHeight(), true);
-	splitPane.setChild(pane, 0);
-	//splitPane.setChild(pane, 1);
+	splitPane.setChild(pane, 1);
+	splitPane.setChild(textPane, 0);
 
 	window.addResizeCallback([&](GLFWwindow *, int w, int h) { splitPane.resize(w, h); });
 
@@ -98,12 +104,20 @@ int main(int argc, char *argv[]) {
 			fontSize = std::max(2.f, fontSize);
 			textRenderer.setFontSize(fontSize);
 		} else {
-			pane->scroll(0, std::copysign(1.f, yOffset) * 1.0f);
+			splitPane.scroll(mouse, 0, std::copysign(1.f, yOffset) * 1.0f);
 		}
+	});
+	fxed::Mouse::addMouseButtonCallback([&](GLFWwindow *, int button, int action, int mods) {
+		splitPane.mouseClick(mouse, button, action, mods);
+	});
+
+	fxed::Mouse::addMouseMoveCallback([&](GLFWwindow *, double xpos, double ypos) {
+		splitPane.mouseMove(mouse, xpos, ypos);
 	});
 
 	while (!window.shouldClose()) {
 		window.beginFrame();
+		mouse.update();
 		bool res = win->beginFrame();
 		if (!res) {
 			window.swapBuffers();
