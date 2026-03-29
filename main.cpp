@@ -54,12 +54,16 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	fxed::TextEditorPane pane(*nri, window.getMainQueue(), window.getWidth(), window.getHeight(), textRenderer,
-							  TextEditor(text));
+	std::shared_ptr<fxed::TextEditorPane> pane = std::make_unique<fxed::TextEditorPane>(
+		*nri, window.getMainQueue(), window.getWidth(), window.getHeight(), textRenderer, TextEditor(text));
 
-	TextEditorController editorController(pane.getEditor());
+	TextEditorController editorController(pane->getEditor());
 
-	window.addResizeCallback([&](GLFWwindow *, int w, int h) { pane.resize(w, h); });
+	fxed::SplitPane splitPane(*nri, window.getMainQueue(), window.getWidth(), window.getHeight(), true);
+	splitPane.setChild(pane, 0);
+	//splitPane.setChild(pane, 1);
+
+	window.addResizeCallback([&](GLFWwindow *, int w, int h) { splitPane.resize(w, h); });
 
 	fxed::Keyboard::addKeyCallback([&](GLFWwindow *, int key, int, int action, int mods) {
 		// zoom with ctrl + +/-
@@ -74,7 +78,7 @@ int main(int argc, char *argv[]) {
 				} else if (key == GLFW_KEY_S) {
 					std::ofstream file(argv[1] ? argv[1] : "output.txt");
 					if (file.is_open()) {
-						std::u32string text = pane.getEditor().getText();
+						std::u32string text = pane->getEditor().getText();
 						std::ranges::copy(text | fxed::to_utf8, std::ostream_iterator<char>(std::cout));
 						std::ranges::copy(text | fxed::to_utf8, std::ostream_iterator<char>(file));
 						dbLog(dbg::LOG_INFO, "Saved text to output.txt");
@@ -85,6 +89,7 @@ int main(int argc, char *argv[]) {
 			}
 		}
 	});
+
 	fxed::Mouse mouse(window);
 	fxed::Mouse::addScrollCallback([&](GLFWwindow *, double, double yOffset) {
 		if (fxed::Keyboard::getKey(GLFW_KEY_LEFT_CONTROL) || fxed::Keyboard::getKey(GLFW_KEY_RIGHT_CONTROL)) {
@@ -93,7 +98,7 @@ int main(int argc, char *argv[]) {
 			fontSize = std::max(2.f, fontSize);
 			textRenderer.setFontSize(fontSize);
 		} else {
-			pane.scroll(0, std::copysign(1.f, yOffset) * 1.0f);
+			pane->scroll(0, std::copysign(1.f, yOffset) * 1.0f);
 		}
 	});
 
@@ -108,7 +113,7 @@ int main(int argc, char *argv[]) {
 		auto &cmdBuf = win->getCurrentCommandBuffer();
 		win->beginRendering(cmdBuf, win->getCurrentRenderTarget());
 
-		pane.render(cmdBuf);
+		splitPane.render(cmdBuf);
 
 		win->endRendering(cmdBuf);
 		win->endFrame();

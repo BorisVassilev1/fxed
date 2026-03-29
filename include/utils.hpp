@@ -12,7 +12,8 @@
 		return 0;                          \
 	}();
 
-#define STR(x) #x
+#define STR_(x) #x
+#define STR(x) STR_(x)
 
 #include <ranges>
 #include <algorithm>

@@ -226,7 +226,7 @@ class DescriptorSet {
    public:
 	void clear() {
 		if (descriptorSet) {
-			dbLog(dbg::LOG_WARNING, "Descriptor deletion is not implemented, see " __FILE__ " : " STR(__LINE__));
+			dbLog(dbg::LOG_WARNING, "Descriptor deletion is not implemented, see " __FILE__ ":" STR(__LINE__));
 			// TODO:
 			// Currently the resources in the descriptor set are not tracked and some of them
 			// may die before the descriptor set itself, so we can't free the descriptor set without risking

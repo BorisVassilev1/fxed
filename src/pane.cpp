@@ -115,3 +115,47 @@ void fxed::TextEditorPane::render(nri::CommandBuffer &cmdBuf) {
 
 	editor.resetCursorMoved();
 }
+
+fxed::SplitPane::SplitPane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width, uint32_t height, bool isVertical,
+						   float splitRatio)
+	: Pane(nri, queue, width, height), isVertical(isVertical), splitRatio(splitRatio) {
+	resize(width, height);
+}
+
+void fxed::SplitPane::render(nri::CommandBuffer &cmdBuf) {
+	Pane::render(cmdBuf);
+	if (child1) child1->render(cmdBuf);
+	if (child2) child2->render(cmdBuf);
+}
+
+void fxed::SplitPane::resize(uint32_t newWidth, uint32_t newHeight) {
+	size = {newWidth, newHeight};
+	if (isVertical) {
+		if (child1) child1->setTransform(position.x, position.y, newWidth * splitRatio, newHeight);
+		if (child2)
+			child2->setTransform(position.x + newWidth * splitRatio, position.y, newWidth * (1 - splitRatio),
+								 newHeight);
+	} else {
+		if (child1) child1->setTransform(position.x, position.y, newWidth, newHeight * splitRatio);
+		if (child2)
+			child2->setTransform(position.x, position.y + newHeight * splitRatio, newWidth,
+								 newHeight * (1 - splitRatio));
+	}
+}
+void fxed::SplitPane::setTransform(uint32_t posX, uint32_t posY, uint32_t width, uint32_t height) {
+	position = {posX, posY};
+	resize(width, height);
+}
+
+void fxed::SplitPane::setSplitRatio(float ratio) {
+	splitRatio = std::clamp(ratio, 0.0f, 1.0f);
+	resize(this->size.x, this->size.y);
+}
+
+void fxed::SplitPane::setChild(std::shared_ptr<Pane> &&child, int index) {
+	if (index == 0) {
+		child1 = std::move(child);
+	} else if (index == 1) {
+		child2 = std::move(child);
+	}
+}
