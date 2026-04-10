@@ -57,8 +57,6 @@ int main(int argc, char *argv[]) {
 	std::shared_ptr<fxed::TextEditorPane> pane = std::make_unique<fxed::TextEditorPane>(
 		*nri, window.getMainQueue(), window.getWidth(), window.getHeight(), textRenderer, TextEditor(text));
 
-	TextEditorController editorController(pane->getEditor());
-
 	std::shared_ptr<fxed::TextPane> textPane = std::make_unique<fxed::TextPane>(
 		*nri, window.getMainQueue(), window.getWidth(), window.getHeight(), textRenderer);
 	textPane->updateText(
@@ -93,6 +91,15 @@ int main(int argc, char *argv[]) {
 					}
 				}
 			}
+		}
+		if(fxed::Pane::activePane) {
+			fxed::Pane::activePane->keyInput(key, 0, action, mods);
+		}
+	});
+
+	fxed::Keyboard::addCharCallback([&](GLFWwindow *, unsigned int codepoint) {
+		if(fxed::Pane::activePane) {
+			fxed::Pane::activePane->charInput(codepoint);
 		}
 	});
 

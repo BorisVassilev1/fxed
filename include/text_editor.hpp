@@ -1,8 +1,10 @@
 #pragma once
 
+#include <ranges>
 #include <string_view>
 #include "font.hpp"
 #include "input.hpp"
+#include "ranges_join_with.hpp"
 
 class TextEditorBase {
    public:
@@ -10,30 +12,6 @@ class TextEditorBase {
 	virtual void		   deleteChar()				  = 0;
 	virtual void		   moveCursor(int dx, int dy) = 0;
 	virtual std::u32string getText() const			  = 0;
-};
-
-class TextEditorController {
-	TextEditorBase &editor;
-
-   public:
-	TextEditorController(TextEditorBase &editor) : editor(editor) {
-		fxed::Keyboard::addCharCallback(
-			[this](GLFWwindow *, unsigned int codepoint) { this->editor.insertChar((char32_t)codepoint); });
-		fxed::Keyboard::addKeyCallback([this](GLFWwindow *, int key, int, int action, int) {
-			if (action == GLFW_PRESS || action == GLFW_REPEAT) {
-				switch (key) {
-					case GLFW_KEY_BACKSPACE: this->editor.deleteChar(); break;
-					case GLFW_KEY_ENTER: this->editor.insertChar('\n'); break;
-					case GLFW_KEY_TAB: this->editor.insertChar('\t'); break;
-					case GLFW_KEY_LEFT: this->editor.moveCursor(-1, 0); break;
-					case GLFW_KEY_RIGHT: this->editor.moveCursor(1, 0); break;
-					case GLFW_KEY_UP: this->editor.moveCursor(0, -1); break;
-					case GLFW_KEY_DOWN: this->editor.moveCursor(0, 1); break;
-					default: break;
-				}
-			}
-		});
-	}
 };
 
 class TextEditor : public TextEditorBase {
@@ -135,6 +113,10 @@ class TextEditor : public TextEditorBase {
 			result += line + U'\n';
 		}
 		return result;
+	}
+
+	auto getTextRange() const {
+		return lines | fxed::join_with(U'\n');
 	}
 
 	glm::ivec2 getCursorPos() const { return cursorPos; }

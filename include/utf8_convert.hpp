@@ -59,7 +59,7 @@ class ToUtf32 : public std::ranges::view_interface<ToUtf32<R>> {
 
 		iterator() = default;
 		template <class Iterator, class Sentinel>
-		iterator(Iterator &&it, Sentinel &&end) : it(std::forward<Iterator>(it)), end(end) {
+		iterator(Iterator &&it, Sentinel &&end) : it(std::forward<Iterator>(it)), end(std::forward<Sentinel>(end)) {
 			readCodepoint();
 		}
 
@@ -218,7 +218,7 @@ class ToUtf8 : public std::ranges::view_interface<ToUtf8<R>> {
 
 		iterator() = default;
 		template <class Iterator, class Sentinel>
-		iterator(Iterator &&it, Sentinel &&end) : it(std::forward<Iterator>(it)), end(end) {
+		iterator(Iterator &&it, Sentinel &&end) : it(std::forward<Iterator>(it)), end(std::forward<Sentinel>(end)) {
 			writeCodepoint();
 		}
 

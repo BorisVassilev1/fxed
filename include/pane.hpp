@@ -15,7 +15,7 @@ class Pane {
 
 	glm::ivec2 position;
 	glm::ivec2 size;
-	int borderSize = 2;
+	int borderSize = 1;
 
    public:
 	Pane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width = 800, uint32_t height = 600);
@@ -36,6 +36,8 @@ class Pane {
 	virtual void scroll(fxed::Mouse &mouse, int deltaX, int deltaY);
 	virtual void mouseClick(fxed::Mouse &mouse, int button, int action, int mods);
 	virtual void mouseMove(fxed::Mouse &mouse, double deltaX, double deltaY);
+	virtual void charInput(unsigned int codepoint);
+	virtual void keyInput(int key, int scancode, int action, int mods);
 };
 
 class TextPane : public Pane {
@@ -66,6 +68,9 @@ class TextEditorPane : public TextPane {
 	void render(nri::CommandBuffer &cmdBuf) override;
 
 	TextEditor &getEditor() { return editor; }
+
+	void charInput(unsigned int codepoint) override;
+	void keyInput(int key, int scancode, int action, int mods) override;
 };
 
 class SplitPane : public Pane {

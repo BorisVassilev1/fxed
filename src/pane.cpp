@@ -30,6 +30,7 @@ fxed::Pane::Pane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width, uint32
 		auto backgroundMesh = std::make_unique<fxed::QuadMesh>(nri, queue, glm::vec2{2.0, 2.0});
 		backgroundMeshID	= fxed::ResourceManager::getInstance().addMesh(std::move(backgroundMesh));
 	}
+	this->setActive();
 }
 
 void fxed::Pane::render(nri::CommandBuffer &cmdBuf) {
@@ -81,22 +82,28 @@ void fxed::Pane::mouseClick(fxed::Mouse &, int button, int action, int) {
 }
 
 void fxed::Pane::mouseMove(fxed::Mouse &, double, double) {}
+void fxed::Pane::charInput(unsigned int) {}
+void fxed::Pane::keyInput(int, int, int, int) {}
 
 fxed::TextPane::TextPane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width, uint32_t height,
 						 TextRenderer &textRenderer)
 	: Pane(nri, queue, width, height), textRenderer(textRenderer), renderState(), textMesh(nri, queue, 10000) {
 	renderState.viewportSize = {width, height};
-	renderState.translation  = {0, 1};
+	renderState.translation	 = {0, 1};
 }
 
 void fxed::TextPane::render(nri::CommandBuffer &cmdBuf) {
 	// if the text renderer changed atlas may have changed, so we need to update the text mesh
-	if (textRenderer.getVersion() != textRendererVersion) {
+	if (textRenderer.getVersion() != textRendererVersion && !text.empty()) {
 		updateText(text);
 		textRendererVersion = textRenderer.getVersion();
 	}
 	// don't allow scrolling up before the first line
 	renderState.translation.y = std::min(renderState.translation.y, 1.f);
+
+	renderState.translation.y = std::max(renderState.translation.y, -textMesh.getBounds().y + 1);
+
+	renderState.translation.x = std::min(renderState.translation.x, 0.f);
 
 	Pane::render(cmdBuf);
 	TextRenderState currentRenderState = renderState;
@@ -134,12 +141,16 @@ fxed::TextEditorPane::TextEditorPane(nri::NRI &nri, nri::CommandQueue &queue, ui
 void fxed::TextEditorPane::render(nri::CommandBuffer &cmdBuf) {
 	TextPane::render(cmdBuf);
 
-	std::u32string text			 = editor.getText();
-	glm::vec2	  &cursorRealPos = renderState.cursorPos;
+	glm::vec2 &cursorRealPos = renderState.cursorPos;
 	textRenderer.getFont().syncWithGPU();
-	if (editor.hasTextChanged())
-		cursorRealPos = textMesh.updateText(std::span<const char32_t>{text.begin(), text.end()}, textRenderer.getFont(),
-											editor.getCursorPos(), getWidth());
+	// TODO: this is hacky
+	if (editor.hasTextChanged() || editor.hasCursorMoved() || textRenderer.getVersion() != textRendererVersion) {
+		dbLog(dbg::LOG_INFO, "Text changed, updating text mesh");
+		auto text	  = editor.getTextRange();
+		cursorRealPos = textMesh.updateText(text, textRenderer.getFont(), editor.getCursorPos(), getWidth());
+		editor.resetTextChanged();
+		textRendererVersion = textRenderer.getVersion();
+	}
 
 	if (editor.hasCursorMoved()) {
 		glm::vec2 screenBounds = glm::vec2(renderState.viewportSize) / textRenderer.getFontSize();
@@ -157,6 +168,27 @@ void fxed::TextEditorPane::render(nri::CommandBuffer &cmdBuf) {
 	renderState.showCursor = editor.milisecondsSinceLastMove() < 200 || (time - int64_t(time)) < 0.5;
 
 	editor.resetCursorMoved();
+}
+
+void fxed::TextEditorPane::charInput(unsigned int codepoint) {
+	TextPane::charInput(codepoint);
+	editor.insertChar(codepoint);
+}
+
+void fxed::TextEditorPane::keyInput(int key, int scancode, int action, int mods) {
+	TextPane::keyInput(key, scancode, action, mods);
+	if (action == GLFW_PRESS || action == GLFW_REPEAT) {
+		switch (key) {
+			case GLFW_KEY_BACKSPACE: this->editor.deleteChar(); break;
+			case GLFW_KEY_ENTER: this->editor.insertChar('\n'); break;
+			case GLFW_KEY_TAB: this->editor.insertChar('\t'); break;
+			case GLFW_KEY_LEFT: this->editor.moveCursor(-1, 0); break;
+			case GLFW_KEY_RIGHT: this->editor.moveCursor(1, 0); break;
+			case GLFW_KEY_UP: this->editor.moveCursor(0, -1); break;
+			case GLFW_KEY_DOWN: this->editor.moveCursor(0, 1); break;
+			default: break;
+		}
+	}
 }
 
 fxed::SplitPane::SplitPane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width, uint32_t height, bool isVertical,
@@ -210,8 +242,10 @@ void fxed::SplitPane::mouseClick(fxed::Mouse &mouse, int button, int action, int
 	}
 
 	if (child1 && child1->containsPoint(position)) {
+		child1->setActive();
 		child1->mouseClick(mouse, button, action, mods);
 	} else if (child2 && child2->containsPoint(position)) {
+		child2->setActive();
 		child2->mouseClick(mouse, button, action, mods);
 	} else {
 		Pane::mouseClick(mouse, button, action, mods);
