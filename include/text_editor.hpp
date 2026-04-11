@@ -1,141 +1,165 @@
 #pragma once
 
 #include <ranges>
+#include <stack>
 #include <string_view>
 #include "font.hpp"
 #include "input.hpp"
 #include "ranges_join_with.hpp"
 
-class TextEditorBase {
+class TextStateBase {
    public:
-	virtual void		   insertChar(char32_t c)	  = 0;
-	virtual void		   deleteChar()				  = 0;
-	virtual void		   moveCursor(int dx, int dy) = 0;
-	virtual std::u32string getText() const			  = 0;
+	virtual void		   insertChar(char32_t c)		   = 0;
+	virtual char32_t	   deleteChar()					   = 0;
+	virtual void		   moveCursor(int dx, int dy)	   = 0;
+	virtual void		   setCursor(glm::ivec2 pos)	   = 0;
+	virtual glm::ivec2	   getCursorPos() const			   = 0;
+	virtual char32_t	   getCharAt(glm::ivec2 pos) const = 0;
+	virtual std::u32string getText() const				   = 0;
+
+	virtual bool hasCursorMoved() const = 0;
+	virtual bool hasTextChanged() const = 0;
+	virtual void resetCursorMoved()		= 0;
+	virtual void resetTextChanged()		= 0;
+
+	virtual size_t milisecondsSinceLastMove() const = 0;
+	virtual ~TextStateBase()						= default;
 };
 
-class TextEditor : public TextEditorBase {
+class Action {
+   public:
+	virtual bool forward(TextStateBase &editor)	 = 0;
+	virtual void backward(TextStateBase &editor) = 0;
+	virtual void print(std::ostream &os) const	 = 0;
+	virtual ~Action()							 = default;
+};
+
+std::ostream &operator<<(std::ostream &os, const Action &action);
+
+class InsertCharAction : public Action {
+	glm::ivec2 positionBefore;
+	glm::ivec2 positionAfter;
+	char32_t   c;
+
+   public:
+	InsertCharAction(glm::ivec2 position, char32_t c) : positionBefore(position), positionAfter(0), c(c) {}
+
+	char32_t getInsertedChar() const { return c; }
+
+	/// returns true of successful
+	bool forward(TextStateBase &editor) override;
+	void backward(TextStateBase &editor) override;
+	void print(std::ostream &os) const override;
+};
+
+class DeleteCharAction : public Action {
+	glm::ivec2 positionBefore;
+	glm::ivec2 positionAfter;
+	char32_t   c;
+
+   public:
+	DeleteCharAction(glm::ivec2 position) : positionBefore(position), positionAfter(0), c(0) {}
+
+	char32_t getDeletedChar() const { return c; }
+
+	bool forward(TextStateBase &editor) override;
+	void backward(TextStateBase &editor) override;
+	void print(std::ostream &os) const override;
+};
+
+class TextState : public TextStateBase {
 	glm::ivec2					cursorPos{0, 0};
 	std::vector<std::u32string> lines;
 	int							currentMax = 0;
 
-	int32_t measureLineOffset(int line, int charOffset) const {
-		if (charOffset == -1) return -1;
-		int32_t offset = 0;
-		for (int i = 0; i < charOffset; i++) {
-			offset += lines[line][i] == '\t' ? 4 : 1;
-		}
-		return offset;
-	}
+	int32_t measureLineOffset(int line, int charOffset) const;
 
 	bool										   cursorMoved	= false;
 	bool										   textChanged	= true;
 	std::chrono::high_resolution_clock::time_point lastMoveTime = std::chrono::high_resolution_clock::now();
 
    public:
-	TextEditor() { lines.emplace_back(); }
-	TextEditor(std::u32string_view text) {
-		size_t pos = 0;
-		while (pos < text.size()) {
-			size_t nextPos = text.find('\n', pos);
-			if (nextPos == std::string_view::npos) {
-				lines.emplace_back(text.substr(pos));
-				break;
-			} else {
-				lines.emplace_back(text.substr(pos, nextPos - pos));
-				pos = nextPos + 1;
-			}
-		}
-		if (lines.empty()) { lines.emplace_back(); }
-		textChanged	 = true;
-		lastMoveTime = std::chrono::high_resolution_clock::now();
-		cursorMoved	 = true;
-	}
+	TextState() { lines.emplace_back(); }
+	TextState(std::u32string_view text);
+	void		   insertChar(char32_t c) override;
+	char32_t	   deleteChar() override;
+	void		   moveCursor(int dx, int dy) override;
+	void		   setCursor(glm::ivec2 pos) override;
+	char32_t	   getCharAt(glm::ivec2 pos) const override;
+	std::u32string getText() const override;
+
+	auto getTextRange() const { return lines | fxed::join_with(U'\n'); }
+
+	glm::ivec2 getCursorPos() const override;
+
+	bool hasCursorMoved() const override;
+	bool hasTextChanged() const override;
+	void resetCursorMoved() override;
+	void resetTextChanged() override;
+
+	size_t milisecondsSinceLastMove() const override;
+};
+
+template <class TextStateType>
+class TextEditor : public TextStateBase {
+	std::stack<std::unique_ptr<Action>> undoStack;
+	std::stack<std::unique_ptr<Action>> redoStack;
+
+	TextStateType textState;
+
+   public:
+	TextEditor() = default;
+	TextEditor(auto &&textState) : textState(std::forward<decltype(textState)>(textState)) {}
 
 	void insertChar(char32_t c) override {
-		if (c == '\n') {
-			std::u32string newLine = lines[cursorPos.y].substr(cursorPos.x);
-			lines[cursorPos.y].resize(cursorPos.x);
-			lines.insert(lines.begin() + cursorPos.y + 1, std::move(newLine));
-			cursorPos.y++;
-			cursorPos.x = 0;
-		} else {
-			lines[cursorPos.y].insert(lines[cursorPos.y].begin() + cursorPos.x, c);
-			cursorPos.x++;
+		auto action = std::make_unique<InsertCharAction>(textState.getCursorPos(), c);
+		if (!action->forward(textState)) return;
+		undoStack.push(std::move(action));
+		while (!redoStack.empty()) {
+			redoStack.pop();
 		}
-		currentMax	 = measureLineOffset(cursorPos.y, cursorPos.x);
-		cursorMoved	 = true;
-		lastMoveTime = std::chrono::high_resolution_clock::now();
-		textChanged	 = true;
 	}
 
-	void deleteChar() override {
-		if (cursorPos.x > 0) {
-			lines[cursorPos.y].erase(lines[cursorPos.y].begin() + cursorPos.x - 1);
-			cursorPos.x--;
-		} else if (cursorPos.y > 0) {
-			cursorPos.x = lines[cursorPos.y - 1].size();
-			lines[cursorPos.y - 1] += lines[cursorPos.y];
-			lines.erase(lines.begin() + cursorPos.y);
-			cursorPos.y--;
+	char32_t deleteChar() override {
+		auto action = std::make_unique<DeleteCharAction>(textState.getCursorPos());
+		if (!action->forward(textState)) return U'\0';
+		char32_t deletedChar = action->getDeletedChar();
+		undoStack.push(std::move(action));
+		while (!redoStack.empty()) {
+			redoStack.pop();
 		}
-		currentMax	 = measureLineOffset(cursorPos.y, cursorPos.x);
-		cursorMoved	 = true;
-		lastMoveTime = std::chrono::high_resolution_clock::now();
-		textChanged	 = true;
+		return deletedChar;
 	}
 
-	void moveCursor(int dx, int dy) override {
-		int32_t currentLineOffset = 0;
-		for (int i = 0; i < cursorPos.x; i++) {
-			currentLineOffset += lines[cursorPos.y][i] == '\t' ? 4 : 1;
-		}
-		cursorPos.y				 = std::clamp(cursorPos.y + dy, 0, (int32_t)lines.size() - 1);
-		int32_t targetLineOffset = dx != 0 ? currentLineOffset + dx : currentMax;
-		if (dx != 0) { currentMax = targetLineOffset; }
-		int32_t newCursorX = 0;
-		while (newCursorX < (int32_t)lines[cursorPos.y].size() && targetLineOffset > 0) {
-			targetLineOffset -= lines[cursorPos.y][newCursorX] == '\t' ? 4 : 1;
-			newCursorX++;
-		}
-		if (targetLineOffset < 0 && dx < 0) {
-			newCursorX--;
-			currentMax = measureLineOffset(cursorPos.y, newCursorX);
-		}
-		cursorPos.x	 = std::clamp(newCursorX, 0, (int32_t)lines[cursorPos.y].size());
-		cursorMoved	 = true;
-		lastMoveTime = std::chrono::high_resolution_clock::now();
+	void		   moveCursor(int dx, int dy) override { textState.moveCursor(dx, dy); }
+	void		   setCursor(glm::ivec2 pos) override { textState.setCursor(pos); }
+	glm::ivec2	   getCursorPos() const override { return textState.getCursorPos(); }
+	char32_t	   getCharAt(glm::ivec2 pos) const override { return textState.getCharAt(pos); }
+	std::u32string getText() const override { return textState.getText(); }
+	auto		   getTextRange() const { return textState.getTextRange(); }
+
+	void redo() {
+		if (redoStack.empty()) return;
+		auto action = std::move(redoStack.top());
+		redoStack.pop();
+		action->forward(textState);
+		undoStack.push(std::move(action));
 	}
 
-	std::u32string getText() const override {
-		std::u32string result;
-		for (const auto &line : lines) {
-			result += line + U'\n';
-		}
-		return result;
+	void undo() {
+		if (undoStack.empty()) return;
+		auto action = std::move(undoStack.top());
+		undoStack.pop();
+		action->backward(textState);
+		redoStack.push(std::move(action));
 	}
 
-	auto getTextRange() const {
-		return lines | fxed::join_with(U'\n');
-	}
+	bool hasCursorMoved() const override { return textState.hasCursorMoved(); }
+	bool hasTextChanged() const override { return textState.hasTextChanged(); }
+	void resetCursorMoved() override { textState.resetCursorMoved(); }
+	void resetTextChanged() override { textState.resetTextChanged(); }
 
-	glm::ivec2 getCursorPos() const { return cursorPos; }
-
-	void setCursorPos(glm::ivec2 pos) {
-		cursorPos.y	 = std::clamp(pos.y, 0, (int32_t)lines.size() - 1);
-		cursorPos.x	 = std::clamp(pos.x, 0, (int32_t)lines[cursorPos.y].size());
-		currentMax	 = measureLineOffset(cursorPos.y, cursorPos.x);
-		lastMoveTime = std::chrono::high_resolution_clock::now();
-		cursorMoved	 = true;
-	}
-
-	bool hasCursorMoved() const { return cursorMoved; }
-	bool hasTextChanged() const { return textChanged; }
-	void resetCursorMoved() { cursorMoved = false; }
-	void resetTextChanged() { textChanged = false; }
-
-	size_t milisecondsSinceLastMove() const {
-		auto now = std::chrono::high_resolution_clock::now();
-		return std::chrono::duration_cast<std::chrono::milliseconds>(now - lastMoveTime).count();
-	}
+	size_t milisecondsSinceLastMove() const override { return textState.milisecondsSinceLastMove(); }
 };
+
+using DefaultTextEditor = TextEditor<TextState>;

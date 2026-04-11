@@ -15,7 +15,7 @@ class Pane {
 
 	glm::ivec2 position;
 	glm::ivec2 size;
-	int borderSize = 1;
+	int		   borderSize = 1;
 
    public:
 	Pane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width = 800, uint32_t height = 600);
@@ -28,8 +28,8 @@ class Pane {
 
 	uint32_t getWidth() const;
 	uint32_t getHeight() const;
-	void setActive();
-	bool containsPoint(glm::ivec2 point) const;
+	void	 setActive();
+	bool	 containsPoint(glm::ivec2 point) const;
 
 	virtual void resize(uint32_t newWidth, uint32_t newHeight);
 	virtual void setTransform(uint32_t posX, uint32_t posY, uint32_t width, uint32_t height);
@@ -38,15 +38,18 @@ class Pane {
 	virtual void mouseMove(fxed::Mouse &mouse, double deltaX, double deltaY);
 	virtual void charInput(unsigned int codepoint);
 	virtual void keyInput(int key, int scancode, int action, int mods);
+
+	virtual void undo() {}
+	virtual void redo() {}
 };
 
 class TextPane : public Pane {
    protected:
 	TextRenderer   &textRenderer;
-	uint32_t textRendererVersion;
+	uint32_t		textRendererVersion;
 	TextRenderState renderState;
 	TextMesh		textMesh;
-	std::u32string		text;
+	std::u32string	text;
 
    public:
 	TextPane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width, uint32_t height, TextRenderer &textRenderer);
@@ -60,17 +63,20 @@ class TextPane : public Pane {
 
 class TextEditorPane : public TextPane {
    protected:
-	TextEditor editor;
+	DefaultTextEditor editor;
 
    public:
 	TextEditorPane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width, uint32_t height, TextRenderer &textRenderer,
-				   TextEditor &&editor = TextEditor());
+				   DefaultTextEditor &&editor = DefaultTextEditor());
 	void render(nri::CommandBuffer &cmdBuf) override;
 
-	TextEditor &getEditor() { return editor; }
+	DefaultTextEditor &getEditor() { return editor; }
 
 	void charInput(unsigned int codepoint) override;
 	void keyInput(int key, int scancode, int action, int mods) override;
+
+	void undo() override;
+	void redo() override;
 };
 
 class SplitPane : public Pane {
@@ -79,9 +85,9 @@ class SplitPane : public Pane {
 	std::shared_ptr<Pane> child2;
 	bool				  isVertical;	  // true for vertical split, false for horizontal split
 	float				  splitRatio;	  // between 0 and 1
-	
+
 	bool isDragging = false;
-	
+
    public:
 	SplitPane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width, uint32_t height, bool isVertical = true,
 			  float splitRatio = 0.5f);

@@ -135,7 +135,7 @@ void fxed::TextPane::updateText(const std::u32string &text) {
 }
 
 fxed::TextEditorPane::TextEditorPane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width, uint32_t height,
-									 TextRenderer &textRenderer, TextEditor &&editor)
+									 TextRenderer &textRenderer, DefaultTextEditor &&editor)
 	: TextPane(nri, queue, width, height, textRenderer), editor(std::move(editor)) {}
 
 void fxed::TextEditorPane::render(nri::CommandBuffer &cmdBuf) {
@@ -189,6 +189,9 @@ void fxed::TextEditorPane::keyInput(int key, int scancode, int action, int mods)
 		}
 	}
 }
+
+void fxed::TextEditorPane::undo() { editor.undo(); }
+void fxed::TextEditorPane::redo() { editor.redo(); }
 
 fxed::SplitPane::SplitPane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width, uint32_t height, bool isVertical,
 						   float splitRatio)

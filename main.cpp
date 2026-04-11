@@ -55,7 +55,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	std::shared_ptr<fxed::TextEditorPane> pane = std::make_unique<fxed::TextEditorPane>(
-		*nri, window.getMainQueue(), window.getWidth(), window.getHeight(), textRenderer, TextEditor(text));
+		*nri, window.getMainQueue(), window.getWidth(), window.getHeight(), textRenderer, text);
 
 	std::shared_ptr<fxed::TextPane> textPane = std::make_unique<fxed::TextPane>(
 		*nri, window.getMainQueue(), window.getWidth(), window.getHeight(), textRenderer);
@@ -89,18 +89,15 @@ int main(int argc, char *argv[]) {
 					} else {
 						dbLog(dbg::LOG_ERROR, "Failed to open output.txt for writing");
 					}
-				}
+				} else if (key == GLFW_KEY_Z && !(mods & GLFW_MOD_SHIFT)) fxed::Pane::activePane->undo();
+				else if (key == GLFW_KEY_R && !(mods & GLFW_MOD_SHIFT)) fxed::Pane::activePane->redo();
 			}
 		}
-		if(fxed::Pane::activePane) {
-			fxed::Pane::activePane->keyInput(key, 0, action, mods);
-		}
+		if (fxed::Pane::activePane) { fxed::Pane::activePane->keyInput(key, 0, action, mods); }
 	});
 
 	fxed::Keyboard::addCharCallback([&](GLFWwindow *, unsigned int codepoint) {
-		if(fxed::Pane::activePane) {
-			fxed::Pane::activePane->charInput(codepoint);
-		}
+		if (fxed::Pane::activePane) { fxed::Pane::activePane->charInput(codepoint); }
 	});
 
 	fxed::Mouse mouse(window);
@@ -114,13 +111,11 @@ int main(int argc, char *argv[]) {
 			splitPane.scroll(mouse, 0, std::copysign(1.f, yOffset) * 1.0f);
 		}
 	});
-	fxed::Mouse::addMouseButtonCallback([&](GLFWwindow *, int button, int action, int mods) {
-		splitPane.mouseClick(mouse, button, action, mods);
-	});
+	fxed::Mouse::addMouseButtonCallback(
+		[&](GLFWwindow *, int button, int action, int mods) { splitPane.mouseClick(mouse, button, action, mods); });
 
-	fxed::Mouse::addMouseMoveCallback([&](GLFWwindow *, double xpos, double ypos) {
-		splitPane.mouseMove(mouse, xpos, ypos);
-	});
+	fxed::Mouse::addMouseMoveCallback(
+		[&](GLFWwindow *, double xpos, double ypos) { splitPane.mouseMove(mouse, xpos, ypos); });
 
 	while (!window.shouldClose()) {
 		window.beginFrame();

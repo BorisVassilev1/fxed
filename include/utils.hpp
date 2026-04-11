@@ -110,7 +110,7 @@ static const char *log_colors[]{COLOR_GREEN, COLOR_RESET, COLOR_YELLOW, COLOR_RE
  * @return 1
  */
 template <class... Types>
-bool inline f_dbLog(::std::ostream &out, Types... args) {
+bool inline f_dbLog(::std::ostream &out, Types&&... args) {
 	::std::lock_guard lock(dbg::getMutex());
 	(out << ... << args) << ::std::flush;
 	return 1;
