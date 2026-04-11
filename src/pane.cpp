@@ -119,7 +119,7 @@ void fxed::TextPane::scroll(fxed::Mouse &mouse, int deltaX, int deltaY) {
 void fxed::TextPane::resize(uint32_t newWidth, uint32_t newHeight) {
 	Pane::resize(newWidth, newHeight);
 	renderState.viewportSize = {newWidth, newHeight};
-	updateText(text);
+	if (!text.empty()) updateText(text);
 };
 
 void fxed::TextPane::setTransform(uint32_t posX, uint32_t posY, uint32_t width, uint32_t height) {
@@ -145,7 +145,6 @@ void fxed::TextEditorPane::render(nri::CommandBuffer &cmdBuf) {
 	textRenderer.getFont().syncWithGPU();
 	// TODO: this is hacky
 	if (editor.hasTextChanged() || editor.hasCursorMoved() || textRenderer.getVersion() != textRendererVersion) {
-		dbLog(dbg::LOG_INFO, "Text changed, updating text mesh");
 		auto text	  = editor.getTextRange();
 		cursorRealPos = textMesh.updateText(text, textRenderer.getFont(), editor.getCursorPos(), getWidth());
 		editor.resetTextChanged();
@@ -298,7 +297,9 @@ void fxed::SplitPane::setVertical(bool isVertical) {
 void fxed::SplitPane::setChild(std::shared_ptr<Pane> &&child, int index) {
 	if (index == 0) {
 		child1 = std::move(child);
+		child1->setActive();
 	} else if (index == 1) {
 		child2 = std::move(child);
+		child2->setActive();
 	}
 }

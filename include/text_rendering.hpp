@@ -64,8 +64,6 @@ glm::vec2 TextMesh::updateText(CharRange &&text, fxed::FontAtlas &font, glm::ive
 	double	  advanceDY		  = 0.0;
 	int		  advanceX		  = 0;
 	double	  advanceDX		  = 0.0;
-
-	double lineWidthChars = lineWidth > 0 ? std::floor(lineWidth / font.getFontSize()) : 0;
 	double lineHeight	  = 1.2;
 
 	size_t j = 0;
