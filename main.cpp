@@ -12,6 +12,7 @@
 #include "text_rendering.hpp"
 #include "utf8_convert.hpp"
 #include "pane.hpp"
+#include "any_range.hpp"
 
 int main(int argc, char *argv[]) {
 	// 🚀 asd

@@ -4,7 +4,9 @@
 using namespace fxed;
 
 TextMesh::TextMesh(nri::NRI &nri, nri::CommandQueue &q, std::size_t maxCharCount)
-	: fxed::Mesh(nri, maxCharCount * 4, maxCharCount * 6, nri::MEMORY_TYPE_UPLOAD), maxCharCount(maxCharCount), bounds(0, 0) {
+	: fxed::Mesh(nri, maxCharCount * 4, maxCharCount * 6, nri::MEMORY_TYPE_UPLOAD),
+	  maxCharCount(maxCharCount),
+	  bounds(0, 0) {
 	vertexData = (Vertex *)memory->map();
 	if (!vertexData) {
 		dbLog(dbg::LOG_ERROR, "Failed to map vertex buffer for TextMesh");
@@ -106,4 +108,100 @@ void TextRenderer::renderText(nri::CommandBuffer &cmdBuf, const fxed::TextMesh &
 		cursorMesh.bind(cmdBuf);
 		cursorMesh.draw(cmdBuf, cursorShader);
 	}
+}
+
+glm::vec2 TextMesh::updateText(fxed::any_input_range<char32_t> &&text, fxed::FontAtlas &font, glm::ivec2 cursorPos,
+							   float lineWidth) {
+	bounds					  = glm::vec2(0, 0);
+	glm::vec2 cursorPosResult = cursorPos;
+	size_t	  offset		  = 0;
+	size_t	  indexCount	  = 0;
+	int		  advanceY		  = 0;
+	double	  advanceDY		  = 0.0;
+	int		  advanceX		  = 0;
+	double	  advanceDX		  = 0.0;
+	double	  lineHeight	  = 1.2;
+
+	size_t j = 0;
+	for (auto i = text.begin(); i != text.end(); ++i) {
+		if (j >= maxCharCount) {
+			dbLog(dbg::LOG_WARNING, "TextMesh max character count exceeded, truncating text");
+			break;
+		}
+		if (*i == '\n') {
+			if (cursorPos.x == advanceX && cursorPos.y == advanceY) {
+				cursorPosResult = glm::vec2(advanceDX, advanceDY);
+			}
+
+			advanceDY += lineHeight;
+			advanceDX = 0.0;
+			advanceY += 1;
+			advanceX = 0;
+
+			continue;
+		}
+
+		auto box = font.getGlyphBox(*i);
+		if (lineWidth > 0 && advanceDX + box.advance >= lineWidth / font.getFontSize()) {
+			advanceDY += lineHeight;
+			advanceDX = 0.0;
+		}
+
+		if (*i > 255 || !std::isspace(*i)) {
+			vertexData[4 * j + 0].x = advanceDX + box.bounds.l;
+			vertexData[4 * j + 0].y = advanceDY - box.bounds.t;
+			vertexData[4 * j + 1].x = advanceDX + box.bounds.l;
+			vertexData[4 * j + 1].y = advanceDY - box.bounds.b;
+			vertexData[4 * j + 2].x = advanceDX + box.bounds.r;
+			vertexData[4 * j + 2].y = advanceDY - box.bounds.b;
+			vertexData[4 * j + 3].x = advanceDX + box.bounds.r;
+			vertexData[4 * j + 3].y = advanceDY - box.bounds.t;
+
+			indexData[6 * j + 0] = offset + 0;
+			indexData[6 * j + 1] = offset + 1;
+			indexData[6 * j + 2] = offset + 2;
+			indexData[6 * j + 3] = offset + 2;
+			indexData[6 * j + 4] = offset + 3;
+			indexData[6 * j + 5] = offset + 0;
+
+			vertexData[4 * j + 0].u = (box.rect.x) / (float)font.getAtlasSize();
+			vertexData[4 * j + 0].v = (box.rect.y + box.rect.h) / (float)font.getAtlasSize();
+			vertexData[4 * j + 1].u = (box.rect.x) / (float)font.getAtlasSize();
+			vertexData[4 * j + 1].v = (box.rect.y) / (float)font.getAtlasSize();
+			vertexData[4 * j + 2].u = (box.rect.x + box.rect.w) / (float)font.getAtlasSize();
+			vertexData[4 * j + 2].v = (box.rect.y) / (float)font.getAtlasSize();
+			vertexData[4 * j + 3].u = (box.rect.x + box.rect.w) / (float)font.getAtlasSize();
+			vertexData[4 * j + 3].v = (box.rect.y + box.rect.h) / (float)font.getAtlasSize();
+
+			CharacterDrawMode drawMode = CharacterDrawMode::ALPHA;
+			// if (font.getFontSize() >= 32) {
+			//	drawMode = CharacterDrawMode::MSDF;
+			// }
+
+			if (box.isBitmap) { drawMode = CharacterDrawMode::COLOR; }
+
+			bool drawmodeBit0 = static_cast<int>(drawMode) & 1;
+			bool drawmodeBit1 = static_cast<int>(drawMode) & 2;
+			for (int k = 0; k < 4; k++) {
+				vertexData[4 * j + k].u = std::copysign(vertexData[4 * j + k].u, drawmodeBit0 ? -1.0f : 1.0f);
+				vertexData[4 * j + k].v = std::copysign(vertexData[4 * j + k].v, drawmodeBit1 ? -1.0f : 1.0f);
+			}
+
+			bounds.x = std::max({bounds.x, vertexData[4 * j + 0].x, vertexData[4 * j + 1].x, vertexData[4 * j + 2].x,
+								 vertexData[4 * j + 3].x});
+			bounds.y = std::max({bounds.y, vertexData[4 * j + 0].y, vertexData[4 * j + 1].y, vertexData[4 * j + 2].y,
+								 vertexData[4 * j + 3].y});
+
+			offset += 4;
+			indexCount += 6;
+			++j;
+		}
+
+		if (cursorPos.x == advanceX && cursorPos.y == advanceY) { cursorPosResult = glm::vec2(advanceDX, advanceDY); }
+		advanceX += 1;
+		advanceDX += box.advance;
+	}
+
+	this->indexCount = static_cast<uint32_t>(indexCount);
+	return cursorPosResult;
 }
