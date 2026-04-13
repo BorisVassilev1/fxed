@@ -106,10 +106,7 @@ char32_t TextState::deleteChar() {
 }
 
 void TextState::moveCursor(int dx, int dy) {
-	int32_t currentLineOffset = 0;
-	for (int i = 0; i < cursorPos.x; i++) {
-		currentLineOffset += lines[cursorPos.y][i] == '\t' ? 4 : 1;
-	}
+	int32_t currentLineOffset = measureLineOffset(cursorPos.y, cursorPos.x);
 	cursorPos.y				 = std::clamp(cursorPos.y + dy, 0, (int32_t)lines.size() - 1);
 	int32_t targetLineOffset = dx != 0 ? currentLineOffset + dx : currentMax;
 	if (dx != 0) { currentMax = targetLineOffset; }
