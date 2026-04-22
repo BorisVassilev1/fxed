@@ -56,6 +56,9 @@ class JoinWith : public std::ranges::view_interface<JoinWith<R>> {
 			if (it != end) {
 				innerIt	 = std::ranges::begin(*it);
 				innerEnd = std::ranges::end(*it);
+				if(innerIt == innerEnd) {
+					isSeparator = true;
+				}
 			} else dbLog(dbg::LOG_WARNING, "JoinWith: base range is empty");
 		}
 
