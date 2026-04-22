@@ -306,3 +306,38 @@ void fxed::SplitPane::setChild(std::shared_ptr<Pane> &&child, int index) {
 		child2->setActive();
 	}
 }
+
+void fxed::FileTreePane::refreshListing() {
+	std::u32string listing;
+	try {
+		for (const auto &entry : std::filesystem::directory_iterator(currentPath)) {
+			std::string name = entry.path().filename().string();
+			for (char32_t c : name | to_utf32) {
+				listing.push_back(c);
+			}
+			listing.push_back(U'\n');
+		}
+	} catch (const std::exception &) {
+		dbLog(dbg::LOG_ERROR, "Failed to read directory: %s", currentPath.string().c_str());
+	}
+	updateText(listing);
+}
+
+fxed::FileTreePane::FileTreePane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width, uint32_t height,
+								 TextRenderer &textRenderer)
+	: TextPane(nri, queue, width, height, textRenderer), currentPath(std::filesystem::current_path()) {
+	refreshListing();
+}
+
+void fxed::FileTreePane::render(nri::CommandBuffer &cmdBuf) { TextPane::render(cmdBuf); }
+
+void fxed::FileTreePane::mouseClick(fxed::Mouse &mouse, int button, int action, int mods) {
+	Pane::mouseClick(mouse, button, action, mods);
+}
+
+void fxed::FileTreePane::setPath(const std::filesystem::path &p) {
+	currentPath = p;
+	refreshListing();
+}
+
+const std::filesystem::path &fxed::FileTreePane::getPath() const { return currentPath; }

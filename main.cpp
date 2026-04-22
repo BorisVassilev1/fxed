@@ -58,11 +58,14 @@ int main(int argc, char *argv[]) {
 	std::shared_ptr<fxed::TextEditorPane> pane = std::make_unique<fxed::TextEditorPane>(
 		*nri, window.getMainQueue(), window.getWidth(), window.getHeight(), textRenderer, text);
 
-	std::shared_ptr<fxed::TextPane> textPane = std::make_unique<fxed::TextPane>(
+	//std::shared_ptr<fxed::TextPane> textPane = std::make_unique<fxed::TextPane>(
+	//	*nri, window.getMainQueue(), window.getWidth(), window.getHeight(), textRenderer);
+	//textPane->updateText(
+	//	U"This is a text pane. It can be used to display text, but it cannot be edited. You can use the mouse wheel to "
+	//	"scroll and ctrl + +/- to change the font size.");
+	
+	std::shared_ptr<fxed::FileTreePane> textPane = std::make_unique<fxed::FileTreePane>(
 		*nri, window.getMainQueue(), window.getWidth(), window.getHeight(), textRenderer);
-	textPane->updateText(
-		U"This is a text pane. It can be used to display text, but it cannot be edited. You can use the mouse wheel to "
-		"scroll and ctrl + +/- to change the font size.");
 
 	fxed::SplitPane splitPane(*nri, window.getMainQueue(), window.getWidth(), window.getHeight(), true);
 	splitPane.setChild(pane, 1);

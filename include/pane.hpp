@@ -5,6 +5,11 @@
 #include "resource_manager.hpp"
 #include "text_editor.hpp"
 #include "text_rendering.hpp"
+#include "utf8_convert.hpp"
+
+#include <filesystem>
+#include <vector>
+#include <string>
 
 namespace fxed {
 
@@ -102,6 +107,22 @@ class SplitPane : public Pane {
 	void setSplitRatio(float ratio);
 	void setVertical(bool isVertical);
 	void setChild(std::shared_ptr<Pane> &&child, int index);
+};
+
+class FileTreePane : public TextPane {
+   protected:
+	std::filesystem::path currentPath;
+
+	void refreshListing();
+
+   public:
+	FileTreePane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width, uint32_t height, TextRenderer &textRenderer);
+
+	void render(nri::CommandBuffer &cmdBuf) override;
+	void mouseClick(fxed::Mouse &mouse, int button, int action, int mods) override;
+	void setPath(const std::filesystem::path &p);
+
+	const std::filesystem::path &getPath() const;
 };
 
 }	  // namespace fxed

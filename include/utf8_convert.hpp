@@ -44,8 +44,9 @@ class ToUtf32 : public std::ranges::view_interface<ToUtf32<R>> {
 	class iterator {
 		std::ranges::iterator_t<Base> it;
 		std::ranges::sentinel_t<Base> end;
-		uint32_t					  codepoint = 0;
-		int							  bytesRead = 0;
+		uint32_t					  codepoint	 = 0;
+		int							  bytesRead	 = 0;
+		bool						  forceValid = false;
 
 	   public:
 		using iterator_category = std::input_iterator_tag;
@@ -80,15 +81,16 @@ class ToUtf32 : public std::ranges::view_interface<ToUtf32<R>> {
 
 		template <class OtherBase>
 		bool operator==(const sentinel<OtherBase> &s) const {
-			return it == s.end;
+			return it == s.end && !forceValid;
 		}
 		template <class OtherBase>
 		bool operator!=(const sentinel<OtherBase> &s) const {
-			return it != s.end;
+			return it != s.end || forceValid;
 		}
 
 	   private:
 		void readCodepoint() {
+			forceValid = false;
 			if (it == end) {
 				codepoint = 0;
 				return;
@@ -113,6 +115,10 @@ class ToUtf32 : public std::ranges::view_interface<ToUtf32<R>> {
 				bytesRead = 0;
 			}
 			++it;
+			if(it == end) {
+				forceValid = true;
+				return;
+			}
 			for (int i = 0; i < bytesRead; ++i) {
 				if (it == end) {
 					codepoint = 0;
@@ -146,11 +152,11 @@ class ToUtf32 : public std::ranges::view_interface<ToUtf32<R>> {
 
 		template <class OtherBase>
 		bool operator==(const iterator<OtherBase> &it) const {
-			return it.it == end;
+			return it.it == end && !it.forceValid;
 		}
 		template <class OtherBase>
 		bool operator!=(const iterator<OtherBase> &it) const {
-			return it.it != end;
+			return it.it != end || it.forceValid;
 		}
 	};
 
