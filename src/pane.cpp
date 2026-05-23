@@ -1,4 +1,5 @@
 #include "pane.hpp"
+#include "GLFW/glfw3.h"
 #include "text_rendering.hpp"
 
 struct PushConstants {
@@ -7,6 +8,7 @@ struct PushConstants {
 	glm::vec3  color1;
 	float	   time;
 	glm::ivec2 viewportSize;
+	float	   alpha;
 };
 
 fxed::ResourceID fxed::Pane::backgroundShaderID = fxed::ResourceID::invalid();
@@ -40,13 +42,12 @@ void fxed::Pane::render(nri::CommandBuffer &cmdBuf) {
 	backgroundShader.bind(cmdBuf);
 	backgroundMesh.bind(cmdBuf);
 
-	PushConstants pushConstants{
-		.color0		  = glm::vec3(30 / 255.f, 30 / 255.f, 46 / 255.f),
-		.borderSize	  = borderSize,
-		.color1		  = glm::vec3(0.5f, 0.5f, 0.5f),
-		.time		  = 0,
-		.viewportSize = size,
-	};
+	PushConstants pushConstants{.color0		  = glm::vec3(30 / 255.f, 30 / 255.f, 46 / 255.f),
+								.borderSize	  = borderSize,
+								.color1		  = glm::vec3(0.5f, 0.5f, 0.5f),
+								.time		  = 0,
+								.viewportSize = size,
+								.alpha		  = 1.0f};
 	if (activePane == this) { pushConstants.color1 = glm::vec3(1.0f, 1.0f, 1.0f); }
 
 	backgroundShader.setPushConstants(cmdBuf, &pushConstants, sizeof(pushConstants), 0);
@@ -119,7 +120,7 @@ void fxed::TextPane::scroll(fxed::Mouse &mouse, int deltaX, int deltaY) {
 void fxed::TextPane::resize(uint32_t newWidth, uint32_t newHeight) {
 	Pane::resize(newWidth, newHeight);
 	renderState.viewportSize = {newWidth, newHeight};
-	if (!text.empty()) updateText(text);
+	updateText(text);
 };
 
 void fxed::TextPane::setTransform(uint32_t posX, uint32_t posY, uint32_t width, uint32_t height) {
@@ -128,9 +129,10 @@ void fxed::TextPane::setTransform(uint32_t posX, uint32_t posY, uint32_t width, 
 }
 
 void fxed::TextPane::updateText(const std::u32string &text) {
-	this->text			  = text;
-	renderState.cursorPos = textMesh.updateText(std::span<const char32_t>{text.begin(), text.end()},
-												textRenderer.getFont(), glm::ivec2(0, 0), getWidth() - 2 * borderSize);
+	this->text = text;
+	renderState.cursorPos =
+		textMesh.updateText(std::span<const char32_t>{text.begin(), text.end()}, textRenderer.getFont(),
+							glm::ivec2(0, 0), wordWrap ? getWidth() - 2 * borderSize : 0);
 	textRenderer.getFont().syncWithGPU();
 }
 
@@ -147,6 +149,8 @@ void fxed::TextEditorPane::render(nri::CommandBuffer &cmdBuf) {
 	if (editor.hasTextChanged() || editor.hasCursorMoved() || textRenderer.getVersion() != textRendererVersion) {
 		auto text	  = editor.getTextRange();
 		cursorRealPos = textMesh.updateText(text, textRenderer.getFont(), editor.getCursorPos(), getWidth());
+		this->text.clear();
+		std::ranges::copy(text, std::back_inserter(this->text));
 		editor.resetTextChanged();
 		textRendererVersion = textRenderer.getVersion();
 	}
@@ -308,31 +312,74 @@ void fxed::SplitPane::setChild(std::shared_ptr<Pane> &&child, int index) {
 }
 
 void fxed::FileTreePane::refreshListing() {
+	std::stringstream ss;
+	fileTree.print(ss);
 	std::u32string listing;
-	try {
-		for (const auto &entry : std::filesystem::directory_iterator(currentPath)) {
-			std::string name = entry.path().filename().string();
-			for (char32_t c : name | to_utf32) {
-				listing.push_back(c);
-			}
-			listing.push_back(U'\n');
-		}
-	} catch (const std::exception &) {
-		dbLog(dbg::LOG_ERROR, "Failed to read directory: %s", currentPath.string().c_str());
-	}
+	std::ranges::copy(std::ranges::istream_view<fxed::RawChar>(ss) | fxed::to_utf32, std::back_inserter(listing));
 	updateText(listing);
 }
 
 fxed::FileTreePane::FileTreePane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width, uint32_t height,
 								 TextRenderer &textRenderer)
-	: TextPane(nri, queue, width, height, textRenderer), currentPath(std::filesystem::current_path()) {
+	: TextPane(nri, queue, width, height, textRenderer),
+	  currentPath(std::filesystem::current_path()),
+	  fileTree(currentPath),
+	  selectedRow(1),
+	  selectedIt(fileTree.begin()) {
 	refreshListing();
+	this->wordWrap = false;
 }
 
-void fxed::FileTreePane::render(nri::CommandBuffer &cmdBuf) { TextPane::render(cmdBuf); }
+void fxed::FileTreePane::render(nri::CommandBuffer &cmdBuf) {
+	TextPane::render(cmdBuf);
+	// draw a highlight behind the selected row
+	auto &backgroundShader = fxed::ResourceManager::getInstance().getShader(backgroundShaderID);
+	auto &backgroundMesh   = fxed::ResourceManager::getInstance().getMesh(backgroundMeshID);
+
+	PushConstants pushConstants{.color0		  = glm::vec3(0.5f, 0.5f, 0.5f),
+								.borderSize	  = 0,
+								.color1		  = glm::vec3(0.2f, 0.2f, 0.2f),
+								.time		  = 0,
+								.viewportSize = size,
+								.alpha		  = 0.3f};
+	backgroundShader.bind(cmdBuf);
+	backgroundShader.setPushConstants(cmdBuf, &pushConstants, sizeof(pushConstants), 0);
+	backgroundMesh.bind(cmdBuf);
+	float	  rowHeight	   = textRenderer.getFontSize() * 1.2f;
+	glm::vec2 highlightPos = glm::vec2(position) + glm::vec2(0, selectedRow * rowHeight);
+	cmdBuf.setViewport(highlightPos.x, highlightPos.y, size.x, rowHeight, 0.0f, 1.0f);
+	cmdBuf.setScissor(highlightPos.x, highlightPos.y, size.x, rowHeight);
+	backgroundMesh.draw(cmdBuf, backgroundShader);
+}
 
 void fxed::FileTreePane::mouseClick(fxed::Mouse &mouse, int button, int action, int mods) {
 	Pane::mouseClick(mouse, button, action, mods);
+}
+
+void fxed::FileTreePane::keyInput(int key, int scancode, int action, int mods) {
+	Pane::keyInput(key, scancode, action, mods);
+	if (action == GLFW_PRESS) {
+		if (key == GLFW_KEY_DOWN) {
+			if (!selectedIt.isBack()) {
+				++selectedIt;
+				++selectedRow;
+				this->renderState.cursorPos = glm::vec2(0, selectedRow);
+			}
+		} else if (key == GLFW_KEY_UP) {
+			if (!selectedIt.isBegin()) {
+				--selectedIt;
+				--selectedRow;
+				this->renderState.cursorPos = glm::vec2(0, selectedRow);
+			}
+		} else if (key == GLFW_KEY_ENTER) {
+			auto &node = *selectedIt;
+			if (auto *dirNode = dynamic_cast<fxed::FileTree::DirectoryNode *>(&node)) {
+				dirNode->toggleOpen();
+				refreshListing();
+			}
+		}
+	}
+	selectedIt.printStack(std::cout);
 }
 
 void fxed::FileTreePane::setPath(const std::filesystem::path &p) {

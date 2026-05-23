@@ -16,6 +16,7 @@ struct PushConstants {
 	float3 color1;
 	float time;
 	int2 viewportSize;
+	float alpha;
 };
 
 VK_PUSH_CONST_ATTR
@@ -41,5 +42,5 @@ float4 PSMain(PSInput input) : SV_TARGET {
 	// calculate distance from the edge of the pane
 	float2 distanceFromEdge = min(input.texCoord, 1.0 - input.texCoord);
 	float alpha = step(borderSizeUV.x, distanceFromEdge.x) * step(borderSizeUV.y, distanceFromEdge.y);
-	return float4(lerp(pushConstants.color1, pushConstants.color0, alpha), 1.0);
+	return float4(lerp(pushConstants.color1, pushConstants.color0, alpha), pushConstants.alpha);
 }

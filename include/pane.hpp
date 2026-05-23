@@ -1,5 +1,6 @@
 #pragma once
 
+#include "file_tree.hpp"
 #include "mesh.hpp"
 #include "nri.hpp"
 #include "resource_manager.hpp"
@@ -57,6 +58,8 @@ class TextPane : public Pane {
 	std::u32string	text;
 
    public:
+	bool wordWrap = true;
+
 	TextPane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width, uint32_t height, TextRenderer &textRenderer);
 	void render(nri::CommandBuffer &cmdBuf) override;
 
@@ -112,6 +115,9 @@ class SplitPane : public Pane {
 class FileTreePane : public TextPane {
    protected:
 	std::filesystem::path currentPath;
+	FileTree			  fileTree;
+	int					  selectedRow;
+	FileTree::iterator	  selectedIt;
 
 	void refreshListing();
 
@@ -120,6 +126,8 @@ class FileTreePane : public TextPane {
 
 	void render(nri::CommandBuffer &cmdBuf) override;
 	void mouseClick(fxed::Mouse &mouse, int button, int action, int mods) override;
+
+	void keyInput(int key, int scancode, int action, int mods) override;
 	void setPath(const std::filesystem::path &p);
 
 	const std::filesystem::path &getPath() const;
