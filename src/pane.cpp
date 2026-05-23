@@ -358,7 +358,7 @@ void fxed::FileTreePane::mouseClick(fxed::Mouse &mouse, int button, int action, 
 
 void fxed::FileTreePane::keyInput(int key, int scancode, int action, int mods) {
 	Pane::keyInput(key, scancode, action, mods);
-	if (action == GLFW_PRESS) {
+	if (action == GLFW_PRESS || action == GLFW_REPEAT) {
 		if (key == GLFW_KEY_DOWN) {
 			if (!selectedIt.isBack()) {
 				++selectedIt;

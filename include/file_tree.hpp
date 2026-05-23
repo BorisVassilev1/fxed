@@ -3,7 +3,6 @@
 #include <filesystem>
 #include <vector>
 #include <memory>
-#include "any_range.hpp"
 
 namespace fxed {
 
@@ -47,86 +46,22 @@ class FileTree {
 		std::vector<std::pair<DirectoryNode *, size_t>> stack;
 
 	   public:
-		iterator(DirectoryNode *root) {
-			if (root) stack.push_back({root, 0});
-		}
+		iterator(DirectoryNode *root);
 
-		bool operator!=(const iterator &other) const { return !stack.empty() || !other.stack.empty(); }
-		bool operator==(const iterator &other) const { return stack.empty() && other.stack.empty(); }
+		bool operator!=(const iterator &other) const;
+		bool operator==(const iterator &other) const;
 
-		bool isBegin() const { return stack.size() == 1 && stack.back().second == 0; }
-		bool isBack() const {
-			if (stack.empty()) return true;
-			for (const auto &[dir, index] : stack)
-				if (index != dir->getChildCount() - 1) return false;
-			return true;
-		}
+		bool isBegin() const;
+		bool isBack() const;
 
-		FileTreeNode &operator*() const {
-			if (stack.empty()) throw std::out_of_range("Iterator out of range");
-			auto &[dir, index] = stack.back();
-			if (index >= dir->getChildCount()) throw std::out_of_range("Iterator out of range");
-			return *dir->children[index];
-		}
+		FileTreeNode &operator*() const;
 
-		iterator &operator++() {
-			if (stack.empty()) throw std::out_of_range("Iterator out of range");
-			auto &[dir, index] = stack.back();
-			if (index >= dir->getChildCount()) throw std::out_of_range("Iterator out of range");
+		iterator &operator++();
+		iterator operator++(int);
+		iterator &operator--();
+		iterator operator--(int);
 
-			auto *node = dir->children[index].get();
-			++index;
-
-			if (auto *subdir = dynamic_cast<DirectoryNode *>(node)) { stack.push_back({subdir, 0}); }
-
-			while (!stack.empty()) {
-				auto &[currentDir, currentIndex] = stack.back();
-				if (currentIndex < currentDir->getChildCount()) break;
-				stack.pop_back();
-			}
-
-			return *this;
-		}
-
-		iterator operator++(int) {
-			iterator temp = *this;
-			++(*this);
-			return temp;
-		}
-
-		iterator &operator--() {
-			if (stack.empty()) throw std::out_of_range("Iterator out of range");
-
-			auto &[dir, index] = stack.back();
-			if (index == 0) {
-				stack.pop_back();
-				return *this;
-			}
-
-			--index;
-			auto *node = dir->children[index].get();
-
-			while (auto *subdir = dynamic_cast<DirectoryNode *>(node)) {
-				if (subdir->getChildCount() == 0) break;
-				stack.push_back({subdir, subdir->getChildCount() - 1});
-				node = subdir->children.back().get();
-			}
-
-			return *this;
-		}
-
-		iterator operator--(int) {
-			iterator temp = *this;
-			--(*this);
-			return temp;
-		}
-
-		void printStack(std::ostream &os) const {
-			for (const auto &[dir, index] : stack) {
-				os << dir->path.filename().string() << " ( " << index << " ) ->";
-			}
-			os << std::endl;
-		}
+		void printStack(std::ostream &os) const;
 	};
 
 	iterator begin() { return iterator(root.get()); }
