@@ -58,12 +58,6 @@ int main(int argc, char *argv[]) {
 	std::shared_ptr<fxed::TextEditorPane> pane = std::make_unique<fxed::TextEditorPane>(
 		*nri, window.getMainQueue(), window.getWidth(), window.getHeight(), textRenderer, text);
 
-	//std::shared_ptr<fxed::TextPane> textPane = std::make_unique<fxed::TextPane>(
-	//	*nri, window.getMainQueue(), window.getWidth(), window.getHeight(), textRenderer);
-	//textPane->updateText(
-	//	U"This is a text pane. It can be used to display text, but it cannot be edited. You can use the mouse wheel to "
-	//	"scroll and ctrl + +/- to change the font size.");
-	
 	std::shared_ptr<fxed::FileTreePane> textPane = std::make_unique<fxed::FileTreePane>(
 		*nri, window.getMainQueue(), window.getWidth(), window.getHeight(), textRenderer);
 
@@ -84,12 +78,13 @@ int main(int argc, char *argv[]) {
 					fontSize	  = std::max(2.f, fontSize - 1);
 					textRenderer.setFontSize(fontSize);
 				} else if (key == GLFW_KEY_S) {
-					std::ofstream file(argv[1] ? argv[1] : "output.txt");
+					std::string filename = argc > 1 ? argv[1] : "output.txt";
+					std::ofstream file(filename);
 					if (file.is_open()) {
 						std::u32string text = pane->getEditor().getText();
 						std::ranges::copy(text | fxed::to_utf8, std::ostream_iterator<char>(std::cout));
 						std::ranges::copy(text | fxed::to_utf8, std::ostream_iterator<char>(file));
-						dbLog(dbg::LOG_INFO, "Saved text to output.txt");
+						dbLog(dbg::LOG_INFO, "Saved text to", filename);
 					} else {
 						dbLog(dbg::LOG_ERROR, "Failed to open output.txt for writing");
 					}

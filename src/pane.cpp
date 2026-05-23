@@ -1,5 +1,6 @@
 #include "pane.hpp"
 #include "GLFW/glfw3.h"
+#include "mesh.hpp"
 #include "text_rendering.hpp"
 
 struct PushConstants {
@@ -327,7 +328,8 @@ fxed::FileTreePane::FileTreePane(nri::NRI &nri, nri::CommandQueue &queue, uint32
 	  selectedRow(1),
 	  selectedIt(fileTree.begin()) {
 	refreshListing();
-	this->wordWrap = false;
+	renderState.showCursor = false;
+	this->wordWrap		   = false;
 }
 
 void fxed::FileTreePane::render(nri::CommandBuffer &cmdBuf) {
@@ -336,17 +338,17 @@ void fxed::FileTreePane::render(nri::CommandBuffer &cmdBuf) {
 	auto &backgroundShader = fxed::ResourceManager::getInstance().getShader(backgroundShaderID);
 	auto &backgroundMesh   = fxed::ResourceManager::getInstance().getMesh(backgroundMeshID);
 
-	PushConstants pushConstants{.color0		  = glm::vec3(0.5f, 0.5f, 0.5f),
-								.borderSize	  = 0,
-								.color1		  = glm::vec3(0.2f, 0.2f, 0.2f),
+	float	  rowHeight	   = textRenderer.getFontSize() * 1.2f;
+	PushConstants pushConstants{.color0		  = glm::vec3(0.2f, 0.2f, 0.2f),
+								.borderSize	  = 2,
+								.color1		  = glm::vec3(1.0f, 1.0f, 1.0f),
 								.time		  = 0,
-								.viewportSize = size,
-								.alpha		  = 0.3f};
+								.viewportSize = glm::ivec2(size.x, rowHeight),
+								.alpha		  = 0.0f};
 	backgroundShader.bind(cmdBuf);
 	backgroundShader.setPushConstants(cmdBuf, &pushConstants, sizeof(pushConstants), 0);
 	backgroundMesh.bind(cmdBuf);
-	float	  rowHeight	   = textRenderer.getFontSize() * 1.2f;
-	glm::vec2 highlightPos = glm::vec2(position) + glm::vec2(0, selectedRow * rowHeight);
+	glm::vec2 highlightPos = glm::vec2(position) + glm::vec2(0, selectedRow * rowHeight + textRenderer.getFontSize() * 0.1f);
 	cmdBuf.setViewport(highlightPos.x, highlightPos.y, size.x, rowHeight, 0.0f, 1.0f);
 	cmdBuf.setScissor(highlightPos.x, highlightPos.y, size.x, rowHeight);
 	backgroundMesh.draw(cmdBuf, backgroundShader);
@@ -377,9 +379,12 @@ void fxed::FileTreePane::keyInput(int key, int scancode, int action, int mods) {
 				dirNode->toggleOpen();
 				refreshListing();
 			}
+			else if (auto *fileNode = dynamic_cast<fxed::FileTree::FileNode *>(&node)) {
+				std::filesystem::path filePath = currentPath / fileNode->path;
+				dbLog(dbg::LOG_INFO, "Selected file: ", filePath);
+			}
 		}
 	}
-	selectedIt.printStack(std::cout);
 }
 
 void fxed::FileTreePane::setPath(const std::filesystem::path &p) {
