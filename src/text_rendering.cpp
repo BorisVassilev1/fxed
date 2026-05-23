@@ -140,6 +140,7 @@ glm::vec2 TextMesh::updateText(fxed::any_input_range<char32_t> &&text, fxed::Fon
 
 			continue;
 		}
+		if (*i == 0 || *i == 13) continue;	   // skip null characters
 
 		auto box = font.getGlyphBox(*i);
 		if (lineWidth > 0 && advanceDX + box.advance >= lineWidth / font.getFontSize()) {

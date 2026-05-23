@@ -50,17 +50,17 @@ int32_t TextState::measureLineOffset(int line, int charOffset) const {
 	return offset;
 }
 
-TextState::TextState(std::u32string_view text) {
-	size_t pos = 0;
-	while (pos < text.size()) {
-		size_t nextPos = text.find('\n', pos);
-		if (nextPos == std::string_view::npos) {
-			lines.emplace_back(text.substr(pos));
-			break;
+TextState::TextState(fxed::any_input_range<char32_t> &&text) {
+	lines.emplace_back();
+	auto it = text.begin();
+	while (it != text.end()) {
+		char32_t c = *it;
+		if (c == '\n') {
+			lines.emplace_back();
 		} else {
-			lines.emplace_back(text.substr(pos, nextPos - pos));
-			pos = nextPos + 1;
+			lines.back() += c;
 		}
+		++it;
 	}
 	if (lines.empty()) { lines.emplace_back(); }
 	textChanged	 = true;

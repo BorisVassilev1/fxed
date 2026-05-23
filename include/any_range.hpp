@@ -1,5 +1,6 @@
 #pragma once
 
+#include <iostream>
 #include <ranges>
 #include <memory>
 
@@ -12,10 +13,10 @@ class any_input_range {
 
    private:
 	struct IterBase {
-		virtual const T &current()						 = 0;
-		virtual void	 advance()						 = 0;
-		virtual bool	 equals(const sentinel &s) const = 0;
-		virtual ~IterBase()								 = default;
+		virtual T	 current()						 = 0;
+		virtual void advance()						 = 0;
+		virtual bool equals(const sentinel &s) const = 0;
+		virtual ~IterBase()							 = default;
 	};
 
 	std::unique_ptr<IterBase> iterImpl;
@@ -28,9 +29,12 @@ class any_input_range {
 	   public:
 		IterImpl(R &&range) : it(std::ranges::begin(range)), end(std::ranges::end(range)) {}
 
-		const T &current() override { return *it; }
-		void	 advance() override { ++it; }
-		bool	 equals(const sentinel &) const override { return it == end; }
+		T current() override {
+			if constexpr (std::is_same_v<decltype(*it), char>) { std::cout << *it << std::endl; }
+			return *it;
+		}
+		void advance() override { ++it; }
+		bool equals(const sentinel &) const override { return it == end; }
 	};
 
    public:
@@ -64,7 +68,7 @@ class any_input_range {
 
 		iterator(IterBase *impl) : iterImpl(impl) {}
 
-		reference operator*() const { return iterImpl->current(); }
+		value_type operator*() const { return iterImpl->current(); }
 
 		iterator &operator++() {
 			iterImpl->advance();

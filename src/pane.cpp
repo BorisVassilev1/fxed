@@ -1,5 +1,8 @@
+#include <fstream>
+
 #include "pane.hpp"
 #include "GLFW/glfw3.h"
+#include "editor.hpp"
 #include "mesh.hpp"
 #include "text_rendering.hpp"
 
@@ -89,7 +92,7 @@ void fxed::Pane::keyInput(int, int, int, int) {}
 
 fxed::TextPane::TextPane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width, uint32_t height,
 						 TextRenderer &textRenderer)
-	: Pane(nri, queue, width, height), textRenderer(textRenderer), renderState(), textMesh(nri, queue, 10000) {
+	: Pane(nri, queue, width, height), textRenderer(textRenderer), renderState(), textMesh(nri, queue, 100000) {
 	renderState.viewportSize = {width, height};
 	renderState.translation	 = {0, 1};
 }
@@ -135,6 +138,11 @@ void fxed::TextPane::updateText(const std::u32string &text) {
 		textMesh.updateText(std::span<const char32_t>{text.begin(), text.end()}, textRenderer.getFont(),
 							glm::ivec2(0, 0), wordWrap ? getWidth() - 2 * borderSize : 0);
 	textRenderer.getFont().syncWithGPU();
+}
+void fxed::TextPane::updateText(fxed::any_input_range<char32_t> &&text) {
+	this->text.clear();
+	std::ranges::copy(text, std::back_inserter(this->text));
+	updateText(this->text);
 }
 
 fxed::TextEditorPane::TextEditorPane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width, uint32_t height,
@@ -197,6 +205,18 @@ void fxed::TextEditorPane::keyInput(int key, int scancode, int action, int mods)
 
 void fxed::TextEditorPane::undo() { editor.undo(); }
 void fxed::TextEditorPane::redo() { editor.redo(); }
+
+fxed::FileTextEditorPane::FileTextEditorPane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width, uint32_t height,
+											 TextRenderer &textRenderer, const std::filesystem::path &filePath)
+	: TextEditorPane(nri, queue, width, height, textRenderer), filePath(filePath) {
+	std::ifstream  file(filePath);
+	if (file.is_open()) {
+		this->getEditor() = DefaultTextEditor(std::ranges::istream_view<fxed::RawChar>(file) | fxed::to_utf32);
+		updateText(std::ranges::istream_view<fxed::RawChar>(file) | fxed::to_utf32);
+	} else {
+		dbLog(dbg::LOG_ERROR, "Failed to open file: ", filePath);
+	}
+}
 
 fxed::SplitPane::SplitPane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width, uint32_t height, bool isVertical,
 						   float splitRatio)
@@ -315,9 +335,7 @@ void fxed::SplitPane::setChild(std::shared_ptr<Pane> &&child, int index) {
 void fxed::FileTreePane::refreshListing() {
 	std::stringstream ss;
 	fileTree.print(ss);
-	std::u32string listing;
-	std::ranges::copy(std::ranges::istream_view<fxed::RawChar>(ss) | fxed::to_utf32, std::back_inserter(listing));
-	updateText(listing);
+	updateText(std::ranges::istream_view<fxed::RawChar>(ss) | fxed::to_utf32);
 }
 
 fxed::FileTreePane::FileTreePane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width, uint32_t height,
@@ -338,7 +356,7 @@ void fxed::FileTreePane::render(nri::CommandBuffer &cmdBuf) {
 	auto &backgroundShader = fxed::ResourceManager::getInstance().getShader(backgroundShaderID);
 	auto &backgroundMesh   = fxed::ResourceManager::getInstance().getMesh(backgroundMeshID);
 
-	float	  rowHeight	   = textRenderer.getFontSize() * 1.2f;
+	float		  rowHeight = textRenderer.getFontSize() * 1.2f;
 	PushConstants pushConstants{.color0		  = glm::vec3(0.2f, 0.2f, 0.2f),
 								.borderSize	  = 2,
 								.color1		  = glm::vec3(1.0f, 1.0f, 1.0f),
@@ -348,7 +366,8 @@ void fxed::FileTreePane::render(nri::CommandBuffer &cmdBuf) {
 	backgroundShader.bind(cmdBuf);
 	backgroundShader.setPushConstants(cmdBuf, &pushConstants, sizeof(pushConstants), 0);
 	backgroundMesh.bind(cmdBuf);
-	glm::vec2 highlightPos = glm::vec2(position) + glm::vec2(0, selectedRow * rowHeight + textRenderer.getFontSize() * 0.1f);
+	glm::vec2 highlightPos =
+		glm::vec2(position) + glm::vec2(0, selectedRow * rowHeight + textRenderer.getFontSize() * 0.1f);
 	cmdBuf.setViewport(highlightPos.x, highlightPos.y, size.x, rowHeight, 0.0f, 1.0f);
 	cmdBuf.setScissor(highlightPos.x, highlightPos.y, size.x, rowHeight);
 	backgroundMesh.draw(cmdBuf, backgroundShader);
@@ -378,10 +397,10 @@ void fxed::FileTreePane::keyInput(int key, int scancode, int action, int mods) {
 			if (auto *dirNode = dynamic_cast<fxed::FileTree::DirectoryNode *>(&node)) {
 				dirNode->toggleOpen();
 				refreshListing();
-			}
-			else if (auto *fileNode = dynamic_cast<fxed::FileTree::FileNode *>(&node)) {
+			} else if (auto *fileNode = dynamic_cast<fxed::FileTree::FileNode *>(&node)) {
 				std::filesystem::path filePath = currentPath / fileNode->path;
 				dbLog(dbg::LOG_INFO, "Selected file: ", filePath);
+				Editor::getInstance().openFile(filePath);
 			}
 		}
 	}

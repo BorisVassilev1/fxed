@@ -3,6 +3,7 @@
 #include <ranges>
 #include <stack>
 #include <string_view>
+#include "any_range.hpp"
 #include "font.hpp"
 #include "input.hpp"
 #include "ranges_join_with.hpp"
@@ -80,7 +81,7 @@ class TextState : public TextStateBase {
 
    public:
 	TextState() { lines.emplace_back(); }
-	TextState(std::u32string_view text);
+	TextState(fxed::any_input_range<char32_t> &&text);
 	void		   insertChar(char32_t c) override;
 	char32_t	   deleteChar() override;
 	void		   moveCursor(int dx, int dy) override;

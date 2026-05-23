@@ -67,6 +67,7 @@ class TextPane : public Pane {
 	void resize(uint32_t newWidth, uint32_t newHeight) override;
 	void setTransform(uint32_t posX, uint32_t posY, uint32_t width, uint32_t height) override;
 	void updateText(const std::u32string &text);
+	void updateText(fxed::any_input_range<char32_t> &&text);
 };
 
 class TextEditorPane : public TextPane {
@@ -76,6 +77,7 @@ class TextEditorPane : public TextPane {
    public:
 	TextEditorPane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width, uint32_t height, TextRenderer &textRenderer,
 				   DefaultTextEditor &&editor = DefaultTextEditor());
+
 	void render(nri::CommandBuffer &cmdBuf) override;
 
 	DefaultTextEditor &getEditor() { return editor; }
@@ -86,6 +88,20 @@ class TextEditorPane : public TextPane {
 	void undo() override;
 	void redo() override;
 };
+
+class FileTextEditorPane : public TextEditorPane {
+   protected:
+	std::filesystem::path filePath;
+
+   public:
+	FileTextEditorPane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width, uint32_t height,
+					   TextRenderer &textRenderer, const std::filesystem::path &filePath);
+
+	const std::filesystem::path &getFilePath() const;
+
+	void saveToFile();
+};
+
 
 class SplitPane : public Pane {
    protected:
