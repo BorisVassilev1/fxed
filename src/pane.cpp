@@ -625,7 +625,7 @@ void fxed::TabsPane::mouseMove(fxed::Mouse &mouse, double deltaX, double deltaY)
 	}
 }
 
-void fxed::TabsPane::setActiveTab(uint index) {
+void fxed::TabsPane::setActiveTab(uint32_t index) {
 	if (index < tabs.size()) {
 		activeTab = index;
 		tabs[activeTab]->setActive();

@@ -159,7 +159,7 @@ class TabsPane : public Pane {
    protected:
 	std::vector<std::shared_ptr<Pane>> tabs;
 	std::vector<TextMesh>			   tabMeshes;	  // TODO: optimize by using a single mesh for all tabs
-	uint							   activeTab = 0;
+	uint32_t						   activeTab = 0;
 	TextRenderer					  &textRenderer;
 	uint32_t						   textRendererVersion;
 
@@ -175,7 +175,7 @@ class TabsPane : public Pane {
 	void scroll(fxed::Mouse &mouse, int deltaX, int deltaY) override;
 	void mouseMove(fxed::Mouse &mouse, double deltaX, double deltaY) override;
 
-	void								setActiveTab(uint index);
+	void								setActiveTab(uint32_t index);
 	std::vector<std::shared_ptr<Pane>> &getTabs() { return tabs; }
 };
 
