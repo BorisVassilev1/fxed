@@ -1,3 +1,4 @@
+#include <filesystem>
 #include <fstream>
 #include <memory>
 
@@ -20,16 +21,12 @@ void Editor::setupCallbacks() {
 					fontSize	  = std::max(2.f, fontSize - 1);
 					textRenderer.setFontSize(fontSize);
 				} else if (key == GLFW_KEY_S) {
-					// std::string	  filename = argc > 1 ? argv[1] : "output.txt";
-					// std::ofstream file(filename);
-					// if (file.is_open()) {
-					//	std::u32string text = pane->getEditor().getText();
-					//	std::ranges::copy(text | fxed::to_utf8, std::ostream_iterator<char>(std::cout));
-					//	std::ranges::copy(text | fxed::to_utf8, std::ostream_iterator<char>(file));
-					//	dbLog(dbg::LOG_INFO, "Saved text to", filename);
-					// } else {
-					//	dbLog(dbg::LOG_ERROR, "Failed to open output.txt for writing");
-					// }
+					if (fxed::Pane::activePane) {
+						auto *textEditorPane = dynamic_cast<FileTextEditorPane *>(fxed::Pane::activePane);
+						if (textEditorPane) {
+							textEditorPane->saveToFile();
+						}
+					}
 				} else if (key == GLFW_KEY_Z && !(mods & GLFW_MOD_SHIFT)) fxed::Pane::activePane->undo();
 				else if (key == GLFW_KEY_R && !(mods & GLFW_MOD_SHIFT)) fxed::Pane::activePane->redo();
 			}
@@ -69,10 +66,10 @@ Editor::Editor(nri::NRI &nri, uint32_t width, uint32_t height)
 									   fxed::FontAtlas::findFontPath("Noto Color Emoji"),	  // fallback for emojis
 								   }),
 								   512, 20)) {
-	rootPane		  = std::make_unique<SplitPane>(nri, window.getMainQueue(), width, height, true);
-	auto fileTreePane = std::make_shared<FileTreePane>(nri, window.getMainQueue(), width, height, textRenderer);
-	auto textEditorPane =
-		std::make_shared<TextEditorPane>(nri, window.getMainQueue(), width * 3 / 4, height, textRenderer);
+	rootPane			= std::make_unique<SplitPane>(nri, window.getMainQueue(), width, height, true);
+	auto fileTreePane	= std::make_shared<FileTreePane>(nri, window.getMainQueue(), width, height, textRenderer);
+	auto textEditorPane = std::make_shared<TabsPane>(nri, window.getMainQueue(), width, height, textRenderer);
+
 	static_cast<SplitPane *>(rootPane.get())->setChild(std::move(fileTreePane), 0);
 	static_cast<SplitPane *>(rootPane.get())->setChild(std::move(textEditorPane), 1);
 
@@ -119,12 +116,25 @@ void Editor::mainLoop() {
 }
 
 void Editor::openFile(const std::filesystem::path &path) {
-	auto textEditorPane =
-		std::make_unique<FileTextEditorPane>(nri, window.getMainQueue(), 100, 100, textRenderer, path);
-
 	auto *splitPane = dynamic_cast<SplitPane *>(rootPane.get());
 	assert(splitPane && "Root pane is not a SplitPane");
-	splitPane->setChild(std::move(textEditorPane), 1);
 
-	splitPane->resize(splitPane->getWidth(), splitPane->getHeight());
+	auto *tabsPane = dynamic_cast<TabsPane *>(splitPane->getChild(1).get());
+	assert(tabsPane && "Right child of root pane is not a TabsPane");
+
+	const auto canonicalPath = std::filesystem::canonical(path);
+
+	// check if file is already open in a tab
+	for (size_t i = 0; i < tabsPane->getTabs().size(); ++i) {
+		auto *textEditorPane = dynamic_cast<FileTextEditorPane *>(tabsPane->getTabs()[i].get());
+		if (textEditorPane && textEditorPane->getFilePath() == canonicalPath) {
+			tabsPane->setActiveTab(i);
+			return;
+		}
+	}
+
+	auto textEditorPane =
+		std::make_unique<FileTextEditorPane>(nri, window.getMainQueue(), 100, 100, textRenderer, canonicalPath);
+
+	tabsPane->addTab(std::move(textEditorPane));
 }

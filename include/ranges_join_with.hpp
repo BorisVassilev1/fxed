@@ -35,30 +35,31 @@ class JoinWith : public std::ranges::view_interface<JoinWith<R>> {
 
 	template <class Base, class Inner>
 	class iterator {
-		std::ranges::iterator_t<Base>  it;
-		std::ranges::sentinel_t<Base>  end;
-		std::ranges::iterator_t<Inner> innerIt;
-		std::ranges::sentinel_t<Inner> innerEnd;
-		InnerValueType				   separator;
-		bool						   isSeparator = false;
+		using ConstBase	 = std::add_const_t<Base>;
+		using ConstInner = std::add_const_t<Inner>;
+
+		std::ranges::iterator_t<ConstBase>	it;
+		std::ranges::sentinel_t<ConstBase>	end;
+		std::ranges::iterator_t<ConstInner> innerIt;
+		std::ranges::sentinel_t<ConstInner> innerEnd;
+		InnerValueType						separator;
+		bool								isSeparator = false;
 
 	   public:
 		using iterator_category = std::input_iterator_tag;
-		using value_type		= std::ranges::range_value_t<Inner>;
+		using value_type		= std::ranges::range_value_t<ConstInner>;
 		using difference_type	= std::ptrdiff_t;
 		using pointer			= void;
-		using reference			= std::add_const_t<std::ranges::range_value_t<Inner>> &;
+		using reference			= std::add_const_t<std::ranges::range_value_t<ConstInner>> &;
 
 		iterator() = default;
 		template <class Iterator, class Sentinel>
-		iterator(Iterator &&it, Sentinel &&end, std::ranges::range_value_t<Inner> separator)
+		iterator(Iterator &&it, Sentinel &&end, std::ranges::range_value_t<ConstInner> separator)
 			: it(std::forward<Iterator>(it)), end(end), separator(separator) {
 			if (it != end) {
 				innerIt	 = std::ranges::begin(*it);
 				innerEnd = std::ranges::end(*it);
-				if(innerIt == innerEnd) {
-					isSeparator = true;
-				}
+				if (innerIt == innerEnd) { isSeparator = true; }
 			} else dbLog(dbg::LOG_WARNING, "JoinWith: base range is empty");
 		}
 
@@ -117,15 +118,22 @@ class JoinWith : public std::ranges::view_interface<JoinWith<R>> {
 
 	template <class Base>
 	class sentinel {
-		std::ranges::sentinel_t<Base> end;
+		std::ranges::sentinel_t<std::add_const_t<Base>> end;
 
 	   public:
 		friend class iterator<std::remove_const_t<Base>, InnerRange>;
 		friend class iterator<std::add_const_t<Base>, InnerRange>;
 
 		sentinel() = default;
-		template <class Sentinel>
-		sentinel(Sentinel &&end) : end(std::forward<Sentinel>(end)) {}
+
+		sentinel(sentinel &&other)				   = default;
+		sentinel(const sentinel &other)			   = default;
+		sentinel &operator=(sentinel &&other)	   = default;
+		sentinel &operator=(const sentinel &other) = default;
+
+		//template <class Sentinel>
+		//sentinel(Sentinel &&end) : end(std::forward<Sentinel>(end)) {}
+		sentinel(std::ranges::sentinel_t<std::add_const_t<Base>> &&end) : end(end) {}
 
 		template <class OtherBase, class OtherInner>
 		bool operator==(const iterator<OtherBase, OtherInner> &it) const {
@@ -137,14 +145,14 @@ class JoinWith : public std::ranges::view_interface<JoinWith<R>> {
 		}
 	};
 
-	auto end() { return sentinel<R>(std::ranges::end(base)); }
+	// auto end() { return sentinel<R>(std::ranges::end(base)); }
 	auto end() const { return sentinel<const R>(std::ranges::end(base)); }
-	auto begin() {
-		return iterator<R, std::ranges::range_value_t<R>>(std::ranges::begin(base), std::ranges::end(base), separator);
-	}
+	// auto begin() {
+	//	return iterator<R, std::ranges::range_value_t<R>>(std::ranges::begin(base), std::ranges::end(base), separator);
+	// }
 	auto begin() const {
-		return iterator<const R, std::ranges::range_value_t<R>>(std::ranges::begin(base), std::ranges::end(base),
-																separator);
+		return iterator<const R, std::ranges::range_value_t<const R>>(std::ranges::begin(base), std::ranges::end(base),
+																	  separator);
 	}
 };
 

@@ -19,6 +19,27 @@ TextMesh::TextMesh(nri::NRI &nri, nri::CommandQueue &q, std::size_t maxCharCount
 	}
 }
 
+TextMesh::TextMesh(TextMesh &&other) noexcept
+	: fxed::Mesh(std::move(other)), vertexData(other.vertexData), indexData(other.indexData), maxCharCount(other.maxCharCount),
+	  bounds(other.bounds) {
+	other.vertexData = nullptr;
+	other.indexData  = nullptr;
+}
+
+TextMesh &TextMesh::operator=(TextMesh &&other) noexcept {
+	if (this != &other) {
+		fxed::Mesh::operator=(std::move(other));
+		vertexData	  = other.vertexData;
+		indexData	  = other.indexData;
+		maxCharCount = other.maxCharCount;
+		bounds		  = other.bounds;
+
+		other.vertexData = nullptr;
+		other.indexData  = nullptr;
+	}
+	return *this;
+}
+
 struct PushConstants {
 	glm::ivec2			viewportSize;
 	glm::vec2			translation = {0, 0};

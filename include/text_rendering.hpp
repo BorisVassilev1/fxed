@@ -18,6 +18,8 @@ class TextMesh : public fxed::Mesh {
    public:
 	TextMesh(nri::NRI &nri, nri::CommandQueue &q, std::size_t maxCharCount);
 	DELETE_COPY_AND_ASSIGNMENT(TextMesh);
+	TextMesh(TextMesh &&other) noexcept;
+	TextMesh &operator=(TextMesh &&other) noexcept;
 
 	glm::vec2 updateText(fxed::any_input_range<char32_t> &&text, fxed::FontAtlas &font, glm::ivec2 cursorPos = {0, 0}, float lineWidth = 0);
 

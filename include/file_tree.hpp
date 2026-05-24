@@ -6,6 +6,8 @@
 
 namespace fxed {
 
+std::string_view getIconForFile(const std::filesystem::path &path);
+
 class FileTree {
    public:
 	class FileTreeNode {
@@ -57,9 +59,9 @@ class FileTree {
 		FileTreeNode &operator*() const;
 
 		iterator &operator++();
-		iterator operator++(int);
+		iterator  operator++(int);
 		iterator &operator--();
-		iterator operator--(int);
+		iterator  operator--(int);
 
 		void printStack(std::ostream &os) const;
 	};

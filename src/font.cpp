@@ -256,7 +256,7 @@ int FontAtlas::addGlyphToAtlas(uint32_t c) {
 		box.bounds.t /= fontSize;
 		box.advance /= fontSize;
 
-		//if (fontSize == 32u) {
+		// if (fontSize == 32u) {
 		//	// use msdfgen
 		//	msdfgen::FontHandle *fontHandle = msdfgen::adoptFreetypeFont(face);
 
@@ -397,7 +397,11 @@ fxed::GlyphBox FontAtlas::getGlyphBox(uint32_t c) {
 						.isBitmap = false};
 	} else {
 		auto i = addGlyphToAtlas(c);
-		if (i == -1) { THROW_RUNTIME_ERR(std::format("Glyph '{}' not found in any font in the fallback chain!", c)); }
+		//if (i == -1) { THROW_RUNTIME_ERR(std::format("Glyph '{}' not found in any font in the fallback chain!", c)); }
+		if(i == -1) {
+			dbLog(dbg::LOG_WARNING, "Glyph for codepoint ", c, " not found in any font in the fallback chain!");
+			return getGlyphBox(U'?');
+		}
 		atlasChanged = true;
 		return data->glyphBoxes[i].first;
 	}

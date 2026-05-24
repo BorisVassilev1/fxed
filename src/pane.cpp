@@ -3,8 +3,10 @@
 #include "pane.hpp"
 #include "GLFW/glfw3.h"
 #include "editor.hpp"
+#include "file_tree.hpp"
 #include "mesh.hpp"
 #include "text_rendering.hpp"
+#include "utf8_convert.hpp"
 
 struct PushConstants {
 	glm::vec3  color0;
@@ -18,8 +20,8 @@ struct PushConstants {
 fxed::ResourceID fxed::Pane::backgroundShaderID = fxed::ResourceID::invalid();
 fxed::ResourceID fxed::Pane::backgroundMeshID	= fxed::ResourceID::invalid();
 
-fxed::Pane::Pane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width, uint32_t height)
-	: position(0), size(width, height) {
+fxed::Pane::Pane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width, uint32_t height, std::u32string_view name)
+	: nri(nri), queue(queue), position(0), size(width, height), name(std::move(name)) {
 	if (!backgroundShaderID.isValid()) {
 		auto sb = nri.createProgramBuilder();
 		auto backgroundShader =
@@ -67,12 +69,18 @@ fxed::Pane *fxed::Pane::getActivePane() { return activePane; }
 uint32_t fxed::Pane::getWidth() const { return size.x; }
 uint32_t fxed::Pane::getHeight() const { return size.y; }
 
-void fxed::Pane::setActive() { activePane = this; }
+void fxed::Pane::setActive() {
+	std::string nameUtf8;
+	std::ranges::copy(name | fxed::to_utf8, std::back_inserter(nameUtf8));
+	activePane = this;
+}
 
 bool fxed::Pane::containsPoint(glm::ivec2 point) const {
 	return point.x >= position.x && point.x < position.x + size.x && point.y >= position.y &&
 		   point.y < position.y + size.y;
 }
+
+std::u32string_view fxed::Pane::getName() const { return name; }
 
 void fxed::Pane::resize(uint32_t newWidth, uint32_t newHeight) { size = {newWidth, newHeight}; }
 
@@ -92,7 +100,10 @@ void fxed::Pane::keyInput(int, int, int, int) {}
 
 fxed::TextPane::TextPane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width, uint32_t height,
 						 TextRenderer &textRenderer)
-	: Pane(nri, queue, width, height), textRenderer(textRenderer), renderState(), textMesh(nri, queue, 100000) {
+	: Pane(nri, queue, width, height, U"Pane"),
+	  textRenderer(textRenderer),
+	  renderState(),
+	  textMesh(nri, queue, 100000) {
 	renderState.viewportSize = {width, height};
 	renderState.translation	 = {0, 1};
 }
@@ -118,7 +129,7 @@ void fxed::TextPane::render(nri::CommandBuffer &cmdBuf) {
 
 void fxed::TextPane::scroll(fxed::Mouse &mouse, int deltaX, int deltaY) {
 	Pane::scroll(mouse, deltaX, deltaY);
-	renderState.translation += glm::ivec2(deltaX, deltaY);
+	renderState.translation += glm::ivec2(deltaX * scrollSpeed, deltaY * scrollSpeed);
 }
 
 void fxed::TextPane::resize(uint32_t newWidth, uint32_t newHeight) {
@@ -150,8 +161,6 @@ fxed::TextEditorPane::TextEditorPane(nri::NRI &nri, nri::CommandQueue &queue, ui
 	: TextPane(nri, queue, width, height, textRenderer), editor(std::move(editor)) {}
 
 void fxed::TextEditorPane::render(nri::CommandBuffer &cmdBuf) {
-	TextPane::render(cmdBuf);
-
 	glm::vec2 &cursorRealPos = renderState.cursorPos;
 	textRenderer.getFont().syncWithGPU();
 	// TODO: this is hacky
@@ -178,6 +187,7 @@ void fxed::TextEditorPane::render(nri::CommandBuffer &cmdBuf) {
 			.count() /
 		1000.f;
 	renderState.showCursor = editor.milisecondsSinceLastMove() < 200 || (time - int64_t(time)) < 0.5;
+	TextPane::render(cmdBuf);
 
 	editor.resetCursorMoved();
 }
@@ -209,12 +219,27 @@ void fxed::TextEditorPane::redo() { editor.redo(); }
 fxed::FileTextEditorPane::FileTextEditorPane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width, uint32_t height,
 											 TextRenderer &textRenderer, const std::filesystem::path &filePath)
 	: TextEditorPane(nri, queue, width, height, textRenderer), filePath(filePath) {
-	std::ifstream  file(filePath);
+	std::ifstream file(filePath);
 	if (file.is_open()) {
 		this->getEditor() = DefaultTextEditor(std::ranges::istream_view<fxed::RawChar>(file) | fxed::to_utf32);
 		updateText(std::ranges::istream_view<fxed::RawChar>(file) | fxed::to_utf32);
 	} else {
 		dbLog(dbg::LOG_ERROR, "Failed to open file: ", filePath);
+	}
+	this->name.clear();
+	std::ranges::copy(fxed::getIconForFile(filePath) | fxed::to_utf32, std::back_inserter(this->name));
+	std::ranges::copy(filePath.filename().string() | fxed::to_utf32, std::back_inserter(this->name));
+}
+
+const std::filesystem::path &fxed::FileTextEditorPane::getFilePath() const { return filePath; }
+
+void fxed::FileTextEditorPane::saveToFile() {
+	std::ofstream file(filePath);
+	if (file.is_open()) {
+		std::ranges::copy(editor.getTextRange() | fxed::to_utf8, std::ostream_iterator<char>(file));
+		dbLog(dbg::LOG_INFO, "Saved file: ", filePath);
+	} else {
+		dbLog(dbg::LOG_ERROR, "Failed to open file for writing: ", filePath);
 	}
 }
 
@@ -222,6 +247,7 @@ fxed::SplitPane::SplitPane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t wid
 						   float splitRatio)
 	: Pane(nri, queue, width, height), isVertical(isVertical), splitRatio(splitRatio) {
 	resize(width, height);
+	this->name = U"SplitPane";
 }
 
 void fxed::SplitPane::render(nri::CommandBuffer &cmdBuf) {
@@ -269,10 +295,8 @@ void fxed::SplitPane::mouseClick(fxed::Mouse &mouse, int button, int action, int
 	}
 
 	if (child1 && child1->containsPoint(position)) {
-		child1->setActive();
 		child1->mouseClick(mouse, button, action, mods);
 	} else if (child2 && child2->containsPoint(position)) {
-		child2->setActive();
 		child2->mouseClick(mouse, button, action, mods);
 	} else {
 		Pane::mouseClick(mouse, button, action, mods);
@@ -332,6 +356,16 @@ void fxed::SplitPane::setChild(std::shared_ptr<Pane> &&child, int index) {
 	}
 }
 
+std::shared_ptr<fxed::Pane> &fxed::SplitPane::getChild(int index) {
+	if (index == 0) {
+		return child1;
+	} else if (index == 1) {
+		return child2;
+	} else {
+		throw std::out_of_range("Invalid child index");
+	}
+}
+
 void fxed::FileTreePane::refreshListing() {
 	std::stringstream ss;
 	fileTree.print(ss);
@@ -348,6 +382,7 @@ fxed::FileTreePane::FileTreePane(nri::NRI &nri, nri::CommandQueue &queue, uint32
 	refreshListing();
 	renderState.showCursor = false;
 	this->wordWrap		   = false;
+	this->name			   = U"FileTree";
 }
 
 void fxed::FileTreePane::render(nri::CommandBuffer &cmdBuf) {
@@ -375,6 +410,40 @@ void fxed::FileTreePane::render(nri::CommandBuffer &cmdBuf) {
 
 void fxed::FileTreePane::mouseClick(fxed::Mouse &mouse, int button, int action, int mods) {
 	Pane::mouseClick(mouse, button, action, mods);
+	auto position = mouse.getPosition();
+	position -= this->position;
+	float rowHeight	 = textRenderer.getFontSize() * 1.2f;
+	int	  clickedRow = position.y / rowHeight;
+	if (clickedRow > 0) {	  // TODO: check upper bound as well
+		{
+			auto oldSelectedIt	= selectedIt;
+			auto oldSelectedRow = selectedRow;
+			selectedIt			= fileTree.begin();
+			for (int i = 1; i < clickedRow && selectedIt != fileTree.end(); ++i) {
+				++selectedIt;
+			}
+			if (selectedIt == fileTree.end()) {		// revert to old selection if we clicked out of bounds
+				selectedIt	= oldSelectedIt;
+				selectedRow = oldSelectedRow;
+				return;
+			} else {
+				selectedRow = clickedRow;
+			}
+		}
+
+		this->renderState.cursorPos = glm::vec2(0, selectedRow);
+		if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+			auto &node = *selectedIt;
+			if (auto *dirNode = dynamic_cast<fxed::FileTree::DirectoryNode *>(&node)) {
+				dirNode->toggleOpen();
+				refreshListing();
+			} else if (auto *fileNode = dynamic_cast<fxed::FileTree::FileNode *>(&node)) {
+				std::filesystem::path filePath = currentPath / fileNode->path;
+				dbLog(dbg::LOG_INFO, "Selected file: ", filePath);
+				Editor::getInstance().openFile(filePath);
+			}
+		}
+	}
 }
 
 void fxed::FileTreePane::keyInput(int key, int scancode, int action, int mods) {
@@ -392,12 +461,13 @@ void fxed::FileTreePane::keyInput(int key, int scancode, int action, int mods) {
 				--selectedRow;
 				this->renderState.cursorPos = glm::vec2(0, selectedRow);
 			}
-		} else if (key == GLFW_KEY_ENTER) {
+		} else if (key == GLFW_KEY_ENTER || key == GLFW_KEY_RIGHT) {
 			auto &node = *selectedIt;
 			if (auto *dirNode = dynamic_cast<fxed::FileTree::DirectoryNode *>(&node)) {
 				dirNode->toggleOpen();
 				refreshListing();
 			} else if (auto *fileNode = dynamic_cast<fxed::FileTree::FileNode *>(&node)) {
+				if (key != GLFW_KEY_ENTER) return;
 				std::filesystem::path filePath = currentPath / fileNode->path;
 				dbLog(dbg::LOG_INFO, "Selected file: ", filePath);
 				Editor::getInstance().openFile(filePath);
@@ -412,3 +482,152 @@ void fxed::FileTreePane::setPath(const std::filesystem::path &p) {
 }
 
 const std::filesystem::path &fxed::FileTreePane::getPath() const { return currentPath; }
+
+fxed::TabsPane::TabsPane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width, uint32_t height,
+						 TextRenderer &textRenderer)
+	: Pane(nri, queue, width, height), textRenderer(textRenderer) {
+	this->name = U"Tabs";
+}
+
+void fxed::TabsPane::addTab(std::shared_ptr<Pane> &&pane) {
+	tabs.push_back(std::move(pane));
+	activeTab = tabs.size() - 1;
+	setTransform(position.x, position.y, size.x, size.y);
+	tabMeshes.emplace_back(nri, queue, 100);
+	tabMeshes.back().updateText(tabs.back()->getName(), textRenderer.getFont(), glm::ivec2(0, 0), 0);
+}
+
+void fxed::TabsPane::render(nri::CommandBuffer &cmdBuf) {
+	// render tab headers
+	auto &backgroundShader = fxed::ResourceManager::getInstance().getShader(backgroundShaderID);
+	auto &backgroundMesh   = fxed::ResourceManager::getInstance().getMesh(backgroundMeshID);
+
+	if (textRenderer.getVersion() != textRendererVersion) {
+		for (auto &tab : tabs) {
+			tab->setTransform(position.x, position.y + textRenderer.getFontSize() * 1.5f, size.x,
+							  size.y - textRenderer.getFontSize() * 1.5f);
+		}
+		for (size_t i = 0; i < tabs.size(); ++i) {
+			tabMeshes[i].updateText(tabs[i]->getName(), textRenderer.getFont(), glm::ivec2(0, 0), 0);
+		}
+		textRendererVersion = textRenderer.getVersion();
+	}
+
+	float		  tabHeight = textRenderer.getFontSize() * 1.5f;
+	PushConstants pushConstants{.color0		  = glm::vec3(0.0f, 0.0f, 0.0f),
+								.borderSize	  = 2,
+								.color1		  = glm::vec3(1.0f, 1.0f, 1.0f),
+								.time		  = 0,
+								.viewportSize = glm::ivec2(0, tabHeight),
+								.alpha		  = 0.0f};
+	backgroundShader.bind(cmdBuf);
+	backgroundMesh.bind(cmdBuf);
+
+	float xOffset = 0;
+	for (size_t i = 0; i < tabs.size(); ++i) {
+		if (i == activeTab) {
+			pushConstants.color1 = glm::vec3(1.0f, 1.0f, 1.0f);
+		} else {
+			pushConstants.color1 = glm::vec3(0.5f, 0.5f, 0.5f);
+		}
+
+		float tabWidth				 = tabMeshes[i].getBounds().x * textRenderer.getFontSize() + 20;
+		pushConstants.viewportSize.x = tabWidth;
+
+		backgroundShader.setPushConstants(cmdBuf, &pushConstants, sizeof(pushConstants), 0);
+		glm::vec2 tabPos = glm::vec2(position) + glm::vec2(xOffset, 0);
+		cmdBuf.setViewport(tabPos.x, tabPos.y, tabWidth, tabHeight, 0.0f, 1.0f);
+		cmdBuf.setScissor(tabPos.x, tabPos.y, tabWidth, tabHeight);
+		backgroundMesh.draw(cmdBuf, backgroundShader);
+
+		xOffset += tabWidth;
+	}
+
+	xOffset = 0;
+	for (size_t i = 0; i < tabs.size(); ++i) {
+		float			tabWidth = tabMeshes[i].getBounds().x * textRenderer.getFontSize() + 20;
+		glm::vec2		tabPos	 = glm::vec2(position) + glm::vec2(xOffset, 0);
+		TextRenderState tabRenderState{
+			.translation  = glm::vec2(0, 1),
+			.viewportSize = glm::ivec2(tabWidth, tabHeight),
+			.cursorPos	  = glm::vec2(0, 0),
+			.showCursor	  = false,
+		};
+		cmdBuf.setViewport(tabPos.x + 10, tabPos.y, tabWidth, tabHeight, 0.0f, 1.0f);
+		cmdBuf.setScissor(tabPos.x + 10, tabPos.y, tabWidth, tabHeight);
+		textRenderer.renderText(cmdBuf, tabMeshes[i], tabRenderState);
+		xOffset += tabWidth;
+	}
+
+	// render active child
+	if (!tabs.empty()) {
+		assert(activeTab >= 0 && activeTab < tabs.size());
+		tabs[activeTab]->render(cmdBuf);
+	}
+}
+
+void fxed::TabsPane::mouseClick(fxed::Mouse &mouse, int button, int action, int mods) {
+	Pane::mouseClick(mouse, button, action, mods);
+
+	auto position = mouse.getPosition();
+	position -= this->position;
+	if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+		float xOffset	= 0;
+		float tabHeight = textRenderer.getFontSize() * 1.5f;
+		for (size_t i = 0; i < tabs.size(); ++i) {
+			float tabWidth = tabMeshes[i].getBounds().x * textRenderer.getFontSize() + 20;
+			if (position.x >= xOffset && position.x < xOffset + tabWidth && position.y >= 0 && position.y < tabHeight) {
+				activeTab = i;
+				tabs[i]->setActive();
+				return;
+			}
+			xOffset += tabWidth;
+		}
+	}
+
+	if (!tabs.empty() && position.y >= textRenderer.getFontSize() * 1.5f) {
+		assert(activeTab >= 0 && activeTab < tabs.size());
+		tabs[activeTab]->mouseClick(mouse, button, action, mods);
+	}
+}
+
+void fxed::TabsPane::resize(uint32_t newWidth, uint32_t newHeight) {
+	Pane::resize(newWidth, newHeight);
+	for (auto &tab : tabs) {
+		tab->setTransform(position.x, position.y + textRenderer.getFontSize() * 1.5f, newWidth,
+						  newHeight - textRenderer.getFontSize() * 1.5f);
+	}
+}
+
+void fxed::TabsPane::setTransform(uint32_t posX, uint32_t posY, uint32_t width, uint32_t height) {
+	Pane::setTransform(posX, posY, width, height);
+	for (auto &tab : tabs) {
+		tab->setTransform(posX, posY + textRenderer.getFontSize() * 1.5f, width,
+						  height - textRenderer.getFontSize() * 1.5f);
+	}
+}
+
+void fxed::TabsPane::scroll(fxed::Mouse &mouse, int deltaX, int deltaY) {
+	if (!tabs.empty()) {
+		assert(activeTab >= 0 && activeTab < tabs.size());
+		tabs[activeTab]->scroll(mouse, deltaX, deltaY);
+	} else {
+		Pane::scroll(mouse, deltaX, deltaY);
+	}
+}
+
+void fxed::TabsPane::mouseMove(fxed::Mouse &mouse, double deltaX, double deltaY) {
+	if (!tabs.empty()) {
+		assert(activeTab >= 0 && activeTab < tabs.size());
+		tabs[activeTab]->mouseMove(mouse, deltaX, deltaY);
+	} else {
+		Pane::mouseMove(mouse, deltaX, deltaY);
+	}
+}
+
+void fxed::TabsPane::setActiveTab(uint index) {
+	if (index < tabs.size()) {
+		activeTab = index;
+		tabs[activeTab]->setActive();
+	}
+}

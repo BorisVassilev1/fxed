@@ -16,15 +16,19 @@ namespace fxed {
 
 class Pane {
    protected:
-	static ResourceID backgroundShaderID;
-	static ResourceID backgroundMeshID;
+	static ResourceID  backgroundShaderID;
+	static ResourceID  backgroundMeshID;
+	nri::NRI		  &nri;
+	nri::CommandQueue &queue;
 
-	glm::ivec2 position;
-	glm::ivec2 size;
-	int		   borderSize = 1;
+	glm::ivec2	   position;
+	glm::ivec2	   size;
+	int			   borderSize = 1;
+	std::u32string name;
 
    public:
-	Pane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width = 800, uint32_t height = 600);
+	Pane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width = 800, uint32_t height = 600,
+		 std::u32string_view name = U"Pane");
 	virtual ~Pane() = default;
 	DELETE_COPY_AND_ASSIGNMENT(Pane);
 	virtual void render(nri::CommandBuffer &cmdBuf);
@@ -32,10 +36,11 @@ class Pane {
 	static Pane *activePane;
 	static Pane *getActivePane();
 
-	uint32_t getWidth() const;
-	uint32_t getHeight() const;
-	void	 setActive();
-	bool	 containsPoint(glm::ivec2 point) const;
+	uint32_t			getWidth() const;
+	uint32_t			getHeight() const;
+	void				setActive();
+	bool				containsPoint(glm::ivec2 point) const;
+	std::u32string_view getName() const;
 
 	virtual void resize(uint32_t newWidth, uint32_t newHeight);
 	virtual void setTransform(uint32_t posX, uint32_t posY, uint32_t width, uint32_t height);
@@ -56,6 +61,7 @@ class TextPane : public Pane {
 	TextRenderState renderState;
 	TextMesh		textMesh;
 	std::u32string	text;
+	float			scrollSpeed = 2.f;
 
    public:
 	bool wordWrap = true;
@@ -102,7 +108,6 @@ class FileTextEditorPane : public TextEditorPane {
 	void saveToFile();
 };
 
-
 class SplitPane : public Pane {
    protected:
 	std::shared_ptr<Pane> child1;
@@ -123,9 +128,10 @@ class SplitPane : public Pane {
 	void mouseMove(fxed::Mouse &mouse, double deltaX, double deltaY) override;
 	void scroll(fxed::Mouse &mouse, int deltaX, int deltaY) override;
 
-	void setSplitRatio(float ratio);
-	void setVertical(bool isVertical);
-	void setChild(std::shared_ptr<Pane> &&child, int index);
+	void				   setSplitRatio(float ratio);
+	void				   setVertical(bool isVertical);
+	void				   setChild(std::shared_ptr<Pane> &&child, int index);
+	std::shared_ptr<Pane> &getChild(int index);
 };
 
 class FileTreePane : public TextPane {
@@ -147,6 +153,30 @@ class FileTreePane : public TextPane {
 	void setPath(const std::filesystem::path &p);
 
 	const std::filesystem::path &getPath() const;
+};
+
+class TabsPane : public Pane {
+   protected:
+	std::vector<std::shared_ptr<Pane>> tabs;
+	std::vector<TextMesh>			   tabMeshes;	  // TODO: optimize by using a single mesh for all tabs
+	uint							   activeTab = 0;
+	TextRenderer					  &textRenderer;
+	uint32_t						   textRendererVersion;
+
+   public:
+	TabsPane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width, uint32_t height, TextRenderer &textRenderer);
+	void addTab(std::shared_ptr<Pane> &&pane);
+	void render(nri::CommandBuffer &cmdBuf) override;
+
+	void mouseClick(fxed::Mouse &mouse, int button, int action, int mods) override;
+
+	void resize(uint32_t newWidth, uint32_t newHeight) override;
+	void setTransform(uint32_t posX, uint32_t posY, uint32_t width, uint32_t height) override;
+	void scroll(fxed::Mouse &mouse, int deltaX, int deltaY) override;
+	void mouseMove(fxed::Mouse &mouse, double deltaX, double deltaY) override;
+
+	void								setActiveTab(uint index);
+	std::vector<std::shared_ptr<Pane>> &getTabs() { return tabs; }
 };
 
 }	  // namespace fxed

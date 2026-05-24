@@ -115,7 +115,7 @@ class ToUtf32 : public std::ranges::view_interface<ToUtf32<R>> {
 				bytesRead = 0;
 			}
 			++it;
-			if(it == end) {
+			if (it == end) {
 				forceValid = true;
 				return;
 			}
@@ -301,8 +301,13 @@ class ToUtf8 : public std::ranges::view_interface<ToUtf8<R>> {
 		friend class iterator<std::remove_const_t<Base>>;
 		friend class iterator<std::add_const_t<Base>>;
 
-		sentinel() = default;
-		sentinel(std::ranges::sentinel_t<R> end) : end(end) {}
+		sentinel()								   = default;
+		sentinel(sentinel &&other)				   = default;
+		sentinel(const sentinel &other)			   = default;
+		sentinel &operator=(sentinel &&other)	   = default;
+		sentinel &operator=(const sentinel &other) = default;
+
+		sentinel(std::ranges::sentinel_t<std::add_const_t<Base>> &&end) : end(end) {}
 
 		template <class OtherBase>
 		bool operator==(const iterator<OtherBase> &it) const {
@@ -314,9 +319,9 @@ class ToUtf8 : public std::ranges::view_interface<ToUtf8<R>> {
 		}
 	};
 
-	auto begin() { return iterator<R>(std::ranges::begin(base), std::ranges::end(base)); }
+	// auto begin() { return iterator<R>(std::ranges::begin(base), std::ranges::end(base)); }
 	auto begin() const { return iterator<const R>(std::ranges::begin(base), std::ranges::end(base)); }
-	auto end() { return sentinel<R>(std::ranges::end(base)); }
+	// auto end() { return sentinel<R>(std::ranges::end(base)); }
 	auto end() const { return sentinel<const R>(std::ranges::end(base)); }
 };
 

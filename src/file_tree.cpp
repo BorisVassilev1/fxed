@@ -6,7 +6,7 @@
 
 using namespace fxed;
 
-static std::string_view getIconForFile(const std::filesystem::path &path) {
+std::string_view fxed::getIconForFile(const std::filesystem::path &path) {
 	if (path.extension() == ".cpp") return " ";
 	if (path.extension() == ".h") return " ";
 	if (path.extension() == ".hpp") return " ";
@@ -59,23 +59,22 @@ void FileTree::DirectoryNode::toggleOpen() {
 			}
 		}
 
-		std::sort(children.begin(), children.end(), [](const std::unique_ptr<FileTreeNode> &a, const std::unique_ptr<FileTreeNode> &b) {
-			bool aIsDir = dynamic_cast<DirectoryNode *>(a.get()) != nullptr;
-			bool bIsDir = dynamic_cast<DirectoryNode *>(b.get()) != nullptr;
-			if (aIsDir != bIsDir) return aIsDir > bIsDir; // Directories first
-			return a->path.filename() < b->path.filename(); // Then sort by name
-		});
-
+		std::sort(children.begin(), children.end(),
+				  [](const std::unique_ptr<FileTreeNode> &a, const std::unique_ptr<FileTreeNode> &b) {
+					  bool aIsDir = dynamic_cast<DirectoryNode *>(a.get()) != nullptr;
+					  bool bIsDir = dynamic_cast<DirectoryNode *>(b.get()) != nullptr;
+					  if (aIsDir != bIsDir) return aIsDir > bIsDir;		  // Directories first
+					  return a->path.filename() < b->path.filename();	  // Then sort by name
+				  });
 	}
 }
 
 FileTree::FileTree(const std::filesystem::path &rootPath) {
 	if (!std::filesystem::is_directory(rootPath)) { throw std::invalid_argument("Root path must be a directory"); }
 
-	root		 = std::make_unique<DirectoryNode>();
-	root->path	 = rootPath;
+	root	   = std::make_unique<DirectoryNode>();
+	root->path = rootPath;
 	root->toggleOpen();
-
 }
 
 void FileTree::print(std::ostream &os) const {
