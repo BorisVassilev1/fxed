@@ -28,6 +28,7 @@ class Editor {
 	void mainLoop();
 
 	void openFile(const std::filesystem::path &path);
+	void setFolder(const std::filesystem::path &path);
 	
 };
 

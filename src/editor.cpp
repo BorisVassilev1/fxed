@@ -23,9 +23,7 @@ void Editor::setupCallbacks() {
 				} else if (key == GLFW_KEY_S) {
 					if (fxed::Pane::activePane) {
 						auto *textEditorPane = dynamic_cast<FileTextEditorPane *>(fxed::Pane::activePane);
-						if (textEditorPane) {
-							textEditorPane->saveToFile();
-						}
+						if (textEditorPane) { textEditorPane->saveToFile(); }
 					}
 				} else if (key == GLFW_KEY_Z && !(mods & GLFW_MOD_SHIFT)) fxed::Pane::activePane->undo();
 				else if (key == GLFW_KEY_R && !(mods & GLFW_MOD_SHIFT)) fxed::Pane::activePane->redo();
@@ -66,8 +64,9 @@ Editor::Editor(nri::NRI &nri, uint32_t width, uint32_t height)
 									   fxed::FontAtlas::findFontPath("Noto Color Emoji"),	  // fallback for emojis
 								   }),
 								   512, 20)) {
-	rootPane			= std::make_unique<SplitPane>(nri, window.getMainQueue(), width, height, true);
-	auto fileTreePane	= std::make_shared<FileTreePane>(nri, window.getMainQueue(), width, height, textRenderer);
+	rootPane		  = std::make_unique<SplitPane>(nri, window.getMainQueue(), width, height, true);
+	auto fileTreePane = std::make_shared<FileTreePane>(nri, window.getMainQueue(), width, height, textRenderer);
+	fileTreePane->setActive();
 	auto textEditorPane = std::make_shared<TabsPane>(nri, window.getMainQueue(), width, height, textRenderer);
 
 	static_cast<SplitPane *>(rootPane.get())->setChild(std::move(fileTreePane), 0);
@@ -136,5 +135,16 @@ void Editor::openFile(const std::filesystem::path &path) {
 	auto textEditorPane =
 		std::make_unique<FileTextEditorPane>(nri, window.getMainQueue(), 100, 100, textRenderer, canonicalPath);
 
-	tabsPane->addTab(std::move(textEditorPane));
+	auto index = tabsPane->addTab(std::move(textEditorPane));
+	tabsPane->setActiveTab(index);
+}
+
+void Editor::setFolder(const std::filesystem::path &path) {
+	auto *splitPane = dynamic_cast<SplitPane *>(rootPane.get());
+	assert(splitPane && "Root pane is not a SplitPane");
+
+	auto *fileTreePane = dynamic_cast<FileTreePane *>(splitPane->getChild(0).get());
+	assert(fileTreePane && "Left child of root pane is not a FileTreePane");
+
+	fileTreePane->setPath(std::filesystem::canonical(path));
 }

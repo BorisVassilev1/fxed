@@ -24,30 +24,27 @@ int main(int argc, char *argv[]) {
 	//
 	// 🔔 asd
 
-	// const std::vector<std::string> lines = {"Hello, World!", "This is a test.", "😀"};
-	// auto text = lines | fxed::join_with('\n');
-	// std::ranges::copy(text, std::ostream_iterator<char>(std::cout));
-
 	fxed::Editor editor(*nri, 800, 600);
 
 	// glfwSetWindowAttrib(window.getHandle(), GLFW_DECORATED, !glfwGetWindowAttrib(window.getHandle(),
 	// GLFW_DECORATED));
 
 	// load argv[1] if exists
-	std::u32string text;
-	if (argc > 1) {
-		std::ifstream file(argv[1]);
-		if (file.is_open()) {
-			std::ranges::copy(std::ranges::istream_view<fxed::RawChar>(file) | fxed::to_utf32,
-							  std::back_inserter(text));
 
-			file.close();
+	if (argc > 1) {
+		auto path = std::filesystem::path(argv[1]);
+		if (!std::filesystem::exists(path)) {
+			dbLog(dbg::LOG_ERROR, "File or directory does not exist: ", path);
+			return 1;
+		}
+		if (std::filesystem::is_directory(path)) {
+			dbLog(dbg::LOG_INFO, "Opening folder: ", path);
+			editor.setFolder(path);
 		} else {
-			dbLog(dbg::LOG_ERROR, "Failed to open file: ", argv[1]);
+			dbLog(dbg::LOG_INFO, "Opening file: ", path);
+			editor.openFile(path);
 		}
 	}
-
-	if (argc > 1) { editor.openFile(argv[1]); }
 
 	editor.mainLoop();
 

@@ -38,7 +38,6 @@ fxed::Pane::Pane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width, uint32
 		auto backgroundMesh = std::make_unique<fxed::QuadMesh>(nri, queue, glm::vec2{2.0, 2.0});
 		backgroundMeshID	= fxed::ResourceManager::getInstance().addMesh(std::move(backgroundMesh));
 	}
-	this->setActive();
 }
 
 void fxed::Pane::render(nri::CommandBuffer &cmdBuf) {
@@ -73,6 +72,7 @@ void fxed::Pane::setActive() {
 	std::string nameUtf8;
 	std::ranges::copy(name | fxed::to_utf8, std::back_inserter(nameUtf8));
 	activePane = this;
+	dbLog(dbg::LOG_INFO, "Active pane set to: ", nameUtf8);
 }
 
 bool fxed::Pane::containsPoint(glm::ivec2 point) const {
@@ -350,10 +350,8 @@ void fxed::SplitPane::setVertical(bool isVertical) {
 void fxed::SplitPane::setChild(std::shared_ptr<Pane> &&child, int index) {
 	if (index == 0) {
 		child1 = std::move(child);
-		child1->setActive();
 	} else if (index == 1) {
 		child2 = std::move(child);
-		child2->setActive();
 	}
 }
 
@@ -404,6 +402,8 @@ void fxed::FileTreePane::render(nri::CommandBuffer &cmdBuf) {
 	backgroundMesh.bind(cmdBuf);
 	glm::vec2 highlightPos =
 		glm::vec2(position) + glm::vec2(0, selectedRow * rowHeight + textRenderer.getFontSize() * 0.1f);
+	highlightPos.y += (renderState.translation.y - 1) * textRenderer.getFontSize();
+
 	cmdBuf.setViewport(highlightPos.x, highlightPos.y, size.x, rowHeight, 0.0f, 1.0f);
 	cmdBuf.setScissor(highlightPos.x, highlightPos.y, size.x, rowHeight);
 	backgroundMesh.draw(cmdBuf, backgroundShader);
@@ -413,6 +413,7 @@ void fxed::FileTreePane::mouseClick(fxed::Mouse &mouse, int button, int action, 
 	Pane::mouseClick(mouse, button, action, mods);
 	auto position = mouse.getPosition();
 	position -= this->position;
+	position.y -= (renderState.translation.y - 1) * textRenderer.getFontSize();		// adjust for scrolling
 	float rowHeight	 = textRenderer.getFontSize() * 1.2f;
 	int	  clickedRow = position.y / rowHeight;
 	if (clickedRow > 0) {	  // TODO: check upper bound as well
@@ -479,6 +480,9 @@ void fxed::FileTreePane::keyInput(int key, int scancode, int action, int mods) {
 
 void fxed::FileTreePane::setPath(const std::filesystem::path &p) {
 	currentPath = p;
+	fileTree	= FileTree(currentPath);
+	selectedRow = 1;
+	selectedIt	= fileTree.begin();
 	refreshListing();
 }
 
@@ -495,12 +499,15 @@ fxed::TabsPane::TabsPane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width
 	this->name = U"Tabs";
 }
 
-void fxed::TabsPane::addTab(std::shared_ptr<Pane> &&pane) {
+uint32_t fxed::TabsPane::addTab(std::shared_ptr<Pane> &&pane) {
 	tabs.push_back(std::move(pane));
-	activeTab = tabs.size() - 1;
 	setTransform(position.x, position.y, size.x, size.y);
 	tabMeshes.emplace_back(nri, queue, 100);
-	tabMeshes.back().updateText(tabs.back()->getName(), textRenderer.getFont(), glm::ivec2(0, 0), 0);
+	std::u32string tabName;
+	std::ranges::copy(tabs.back()->getName(), std::back_inserter(tabName));
+	tabName += U"  ";
+	tabMeshes.back().updateText(tabName, textRenderer.getFont(), glm::ivec2(0, 0), 0);
+	return tabs.size() - 1;
 }
 
 void fxed::TabsPane::render(nri::CommandBuffer &cmdBuf) {
@@ -581,9 +588,18 @@ void fxed::TabsPane::mouseClick(fxed::Mouse &mouse, int button, int action, int 
 		float xOffset	= 0;
 		float tabHeight = textRenderer.getFontSize() * 1.5f;
 		for (size_t i = 0; i < tabs.size(); ++i) {
-			float tabWidth = tabMeshes[i].getBounds().x * textRenderer.getFontSize() + 20;
-			if (position.x >= xOffset && position.x < xOffset + tabWidth && position.y >= 0 && position.y < tabHeight) {
+			float tabWidth			  = tabMeshes[i].getBounds().x * textRenderer.getFontSize() + 20;
+			float closeButtonPosition = tabWidth - 10 - textRenderer.getFontSize();
+			if (position.x >= xOffset && position.x < xOffset + closeButtonPosition && position.y >= 0 &&
+				position.y < tabHeight) {
 				setActiveTab(i);
+				return;
+			}
+			if (position.x >= xOffset + closeButtonPosition && position.x < xOffset + tabWidth && position.y >= 0 &&
+				position.y < tabHeight) {
+				tabs.erase(tabs.begin() + i);
+				tabMeshes.erase(tabMeshes.begin() + i);
+				if (activeTab >= i) { setActiveTab(std::max(0u, activeTab - 1)); }
 				return;
 			}
 			xOffset += tabWidth;

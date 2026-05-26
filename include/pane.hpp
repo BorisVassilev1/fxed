@@ -168,8 +168,8 @@ class TabsPane : public Pane {
 
    public:
 	TabsPane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width, uint32_t height, TextRenderer &textRenderer);
-	void addTab(std::shared_ptr<Pane> &&pane);
-	void render(nri::CommandBuffer &cmdBuf) override;
+	uint32_t addTab(std::shared_ptr<Pane> &&pane);
+	void	 render(nri::CommandBuffer &cmdBuf) override;
 
 	void mouseClick(fxed::Mouse &mouse, int button, int action, int mods) override;
 

@@ -1,21 +1,26 @@
 cmake_minimum_required(VERSION 3.10)
 project(fxed)
 
+#set(CMAKE_CXX_COMPILER /usr/bin/clang++)
+#set(CMAKE_C_COMPILER /usr/bin/clang)
+
 set(CMAKE_CXX_STANDARD 20)
 cmake_policy(SET CMP0067 NEW)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wpedantic -fno-omit-frame-pointer -O3")
+set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wpedantic -O3 -ffunction-sections -fdata-sections")
 
 file(GLOB SOURCE_FILES src/*.cpp)
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+	set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -fno-omit-frame-pointer")
     message("Debug build")
     set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -g")
 else()
     message("Release build")
-    add_link_options(-static-libgcc -static-libstdc++)
+	add_link_options(-Wl,--gc-sections)
+	add_link_options(-static-libgcc -static-libstdc++)
 
     file(GLOB SHADER_FILES "${CMAKE_CURRENT_SOURCE_DIR}/shadercache/*.spv")
     add_custom_command(
