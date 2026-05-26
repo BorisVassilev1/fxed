@@ -59,6 +59,7 @@ class TextPane : public Pane {
 	TextRenderer   &textRenderer;
 	uint32_t		textRendererVersion;
 	TextRenderState renderState;
+	glm::ivec2		cursorPos;
 	TextMesh		textMesh;
 	std::u32string	text;
 	float			scrollSpeed = 2.f;
@@ -162,6 +163,8 @@ class TabsPane : public Pane {
 	uint32_t						   activeTab = 0;
 	TextRenderer					  &textRenderer;
 	uint32_t						   textRendererVersion;
+
+	void placeTab(std::shared_ptr<Pane> &pane);
 
    public:
 	TabsPane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width, uint32_t height, TextRenderer &textRenderer);

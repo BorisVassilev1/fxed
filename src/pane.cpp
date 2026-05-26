@@ -135,7 +135,7 @@ void fxed::TextPane::scroll(fxed::Mouse &mouse, int deltaX, int deltaY) {
 void fxed::TextPane::resize(uint32_t newWidth, uint32_t newHeight) {
 	Pane::resize(newWidth, newHeight);
 	renderState.viewportSize = {newWidth, newHeight};
-	updateText(text);
+	if (wordWrap) updateText(text);
 };
 
 void fxed::TextPane::setTransform(uint32_t posX, uint32_t posY, uint32_t width, uint32_t height) {
@@ -144,10 +144,10 @@ void fxed::TextPane::setTransform(uint32_t posX, uint32_t posY, uint32_t width, 
 }
 
 void fxed::TextPane::updateText(const std::u32string &text) {
-	this->text = text;
-	renderState.cursorPos =
-		textMesh.updateText(std::span<const char32_t>{text.begin(), text.end()}, textRenderer.getFont(),
-							glm::ivec2(0, 0), wordWrap ? getWidth() - 2 * borderSize : 0);
+	this->text			  = text;
+	renderState.cursorPos = textMesh.updateText<std::span<const char32_t>>(
+		std::span<const char32_t>{text.begin(), text.end()}, textRenderer.getFont(), cursorPos,
+		wordWrap ? getWidth() - 2 * borderSize : 0);
 	textRenderer.getFont().syncWithGPU();
 }
 void fxed::TextPane::updateText(fxed::any_input_range<char32_t> &&text) {
@@ -165,8 +165,9 @@ void fxed::TextEditorPane::render(nri::CommandBuffer &cmdBuf) {
 	textRenderer.getFont().syncWithGPU();
 	// TODO: this is hacky
 	if (editor.hasTextChanged() || editor.hasCursorMoved() || textRenderer.getVersion() != textRendererVersion) {
-		auto text	  = editor.getTextRange();
-		cursorRealPos = textMesh.updateText(text, textRenderer.getFont(), editor.getCursorPos(), getWidth());
+		auto &&text	  = editor.getTextRange();
+		cursorPos	  = editor.getCursorPos();
+		cursorRealPos = textMesh.updateText(text, textRenderer.getFont(), cursorPos, wordWrap ? getWidth() : 0);
 		this->text.clear();
 		std::ranges::copy(text, std::back_inserter(this->text));
 		editor.resetTextChanged();
@@ -177,7 +178,7 @@ void fxed::TextEditorPane::render(nri::CommandBuffer &cmdBuf) {
 		glm::vec2 screenBounds = glm::vec2(renderState.viewportSize) / textRenderer.getFontSize();
 		// clamp translation to prevent moving text out of screen
 		renderState.translation.x =
-			std::clamp<float>(renderState.translation.x, -cursorRealPos.x, screenBounds.x - cursorRealPos.x - 1);
+			std::clamp<float>(renderState.translation.x, -cursorRealPos.x, screenBounds.x - cursorRealPos.x - 0.5);
 		renderState.translation.y =
 			std::clamp<float>(renderState.translation.y, -cursorRealPos.y + 1, screenBounds.y - cursorRealPos.y - 1);
 	}
@@ -483,6 +484,11 @@ void fxed::FileTreePane::setPath(const std::filesystem::path &p) {
 
 const std::filesystem::path &fxed::FileTreePane::getPath() const { return currentPath; }
 
+void fxed::TabsPane::placeTab(std::shared_ptr<Pane> &pane) {
+	pane->setTransform(position.x, position.y + textRenderer.getFontSize() * 1.5f, size.x,
+					   size.y - textRenderer.getFontSize() * 1.5f);
+}
+
 fxed::TabsPane::TabsPane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width, uint32_t height,
 						 TextRenderer &textRenderer)
 	: Pane(nri, queue, width, height), textRenderer(textRenderer) {
@@ -577,8 +583,7 @@ void fxed::TabsPane::mouseClick(fxed::Mouse &mouse, int button, int action, int 
 		for (size_t i = 0; i < tabs.size(); ++i) {
 			float tabWidth = tabMeshes[i].getBounds().x * textRenderer.getFontSize() + 20;
 			if (position.x >= xOffset && position.x < xOffset + tabWidth && position.y >= 0 && position.y < tabHeight) {
-				activeTab = i;
-				tabs[i]->setActive();
+				setActiveTab(i);
 				return;
 			}
 			xOffset += tabWidth;
@@ -593,17 +598,17 @@ void fxed::TabsPane::mouseClick(fxed::Mouse &mouse, int button, int action, int 
 
 void fxed::TabsPane::resize(uint32_t newWidth, uint32_t newHeight) {
 	Pane::resize(newWidth, newHeight);
-	for (auto &tab : tabs) {
-		tab->setTransform(position.x, position.y + textRenderer.getFontSize() * 1.5f, newWidth,
-						  newHeight - textRenderer.getFontSize() * 1.5f);
+	if (!tabs.empty()) {
+		assert(activeTab >= 0 && activeTab < tabs.size());
+		placeTab(tabs[activeTab]);
 	}
 }
 
 void fxed::TabsPane::setTransform(uint32_t posX, uint32_t posY, uint32_t width, uint32_t height) {
 	Pane::setTransform(posX, posY, width, height);
-	for (auto &tab : tabs) {
-		tab->setTransform(posX, posY + textRenderer.getFontSize() * 1.5f, width,
-						  height - textRenderer.getFontSize() * 1.5f);
+	if (!tabs.empty()) {
+		assert(activeTab >= 0 && activeTab < tabs.size());
+		placeTab(tabs[activeTab]);
 	}
 }
 
@@ -629,5 +634,6 @@ void fxed::TabsPane::setActiveTab(uint32_t index) {
 	if (index < tabs.size()) {
 		activeTab = index;
 		tabs[activeTab]->setActive();
+		placeTab(tabs[activeTab]);
 	}
 }

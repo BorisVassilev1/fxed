@@ -399,7 +399,7 @@ fxed::GlyphBox FontAtlas::getGlyphBox(uint32_t c) {
 		auto i = addGlyphToAtlas(c);
 		//if (i == -1) { THROW_RUNTIME_ERR(std::format("Glyph '{}' not found in any font in the fallback chain!", c)); }
 		if(i == -1) {
-			dbLog(dbg::LOG_WARNING, "Glyph for codepoint ", c, " not found in any font in the fallback chain!");
+			//dbLog(dbg::LOG_WARNING, "Glyph for codepoint ", c, " not found in any font in the fallback chain!");
 			return getGlyphBox(U'?');
 		}
 		atlasChanged = true;

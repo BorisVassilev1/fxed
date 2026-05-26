@@ -97,3 +97,4 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 target_compile_definitions(${PROJECT_NAME} PRIVATE
  DBG_LOG_LEVEL=-1
 )
+
