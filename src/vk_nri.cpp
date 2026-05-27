@@ -288,6 +288,10 @@ void VulkanNRI::createLogicalDevice() {
 #include <GLFW/glfw3.h>
 namespace nri {
 static void prepareGLFW() {
+#ifdef __linux__
+	glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
+#endif
+
 	if (!glfwInit()) { throw std::runtime_error("Failed to initialize GLFW"); }
 	if (!glfwVulkanSupported()) { throw std::runtime_error("GLFW: Vulkan not supported"); }
 
@@ -970,8 +974,8 @@ void VulkanWindow::createSwapChain(uint32_t &width, uint32_t &height) {
 		return;
 	}
 
-	width  = std::clamp(windowExtent.x, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
-	height = std::clamp(windowExtent.y, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
+	width		 = std::clamp(windowExtent.x, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
+	height		 = std::clamp(windowExtent.y, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
 	this->width	 = width;
 	this->height = height;
 

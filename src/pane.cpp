@@ -89,7 +89,7 @@ void fxed::Pane::setTransform(uint32_t posX, uint32_t posY, uint32_t width, uint
 	resize(width, height);
 }
 
-void fxed::Pane::scroll(fxed::Mouse &, int, int) {}
+void fxed::Pane::scroll(fxed::Mouse &, double, double) {}
 void fxed::Pane::mouseClick(fxed::Mouse &, int button, int action, int) {
 	if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) { setActive(); }
 }
@@ -127,7 +127,7 @@ void fxed::TextPane::render(nri::CommandBuffer &cmdBuf) {
 	textRenderer.renderText(cmdBuf, textMesh, currentRenderState);
 }
 
-void fxed::TextPane::scroll(fxed::Mouse &mouse, int deltaX, int deltaY) {
+void fxed::TextPane::scroll(fxed::Mouse &mouse, double deltaX, double deltaY) {
 	Pane::scroll(mouse, deltaX, deltaY);
 	renderState.translation += glm::ivec2(deltaX * scrollSpeed, deltaY * scrollSpeed);
 }
@@ -326,7 +326,7 @@ void fxed::SplitPane::mouseMove(fxed::Mouse &mouse, double deltaX, double deltaY
 	}
 }
 
-void fxed::SplitPane::scroll(fxed::Mouse &mouse, int deltaX, int deltaY) {
+void fxed::SplitPane::scroll(fxed::Mouse &mouse, double deltaX, double deltaY) {
 	auto position = mouse.getPosition();
 	if (child1 && child1->containsPoint(position)) {
 		child1->scroll(mouse, deltaX, deltaY);
@@ -499,14 +499,18 @@ fxed::TabsPane::TabsPane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width
 	this->name = U"Tabs";
 }
 
+static std::u32string getTabName(const std::shared_ptr<fxed::Pane> &pane) {
+	std::u32string tabName;
+	std::ranges::copy(pane->getName(), std::back_inserter(tabName));
+	tabName += U"  ";
+	return tabName;
+}
+
 uint32_t fxed::TabsPane::addTab(std::shared_ptr<Pane> &&pane) {
 	tabs.push_back(std::move(pane));
 	setTransform(position.x, position.y, size.x, size.y);
 	tabMeshes.emplace_back(nri, queue, 100);
-	std::u32string tabName;
-	std::ranges::copy(tabs.back()->getName(), std::back_inserter(tabName));
-	tabName += U"  ";
-	tabMeshes.back().updateText(tabName, textRenderer.getFont(), glm::ivec2(0, 0), 0);
+	tabMeshes.back().updateText(getTabName(tabs.back()), textRenderer.getFont(), glm::ivec2(0, 0), 0);
 	return tabs.size() - 1;
 }
 
@@ -521,7 +525,7 @@ void fxed::TabsPane::render(nri::CommandBuffer &cmdBuf) {
 							  size.y - textRenderer.getFontSize() * 1.5f);
 		}
 		for (size_t i = 0; i < tabs.size(); ++i) {
-			tabMeshes[i].updateText(tabs[i]->getName(), textRenderer.getFont(), glm::ivec2(0, 0), 0);
+			tabMeshes[i].updateText(getTabName(tabs[i]), textRenderer.getFont(), glm::ivec2(0, 0), 0);
 		}
 		textRendererVersion = textRenderer.getVersion();
 	}
@@ -580,8 +584,6 @@ void fxed::TabsPane::render(nri::CommandBuffer &cmdBuf) {
 }
 
 void fxed::TabsPane::mouseClick(fxed::Mouse &mouse, int button, int action, int mods) {
-	Pane::mouseClick(mouse, button, action, mods);
-
 	auto position = mouse.getPosition();
 	position -= this->position;
 	if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
@@ -609,7 +611,7 @@ void fxed::TabsPane::mouseClick(fxed::Mouse &mouse, int button, int action, int 
 	if (!tabs.empty() && position.y >= textRenderer.getFontSize() * 1.5f) {
 		assert(activeTab >= 0 && activeTab < tabs.size());
 		tabs[activeTab]->mouseClick(mouse, button, action, mods);
-	}
+	} else Pane::mouseClick(mouse, button, action, mods);
 }
 
 void fxed::TabsPane::resize(uint32_t newWidth, uint32_t newHeight) {
@@ -628,7 +630,7 @@ void fxed::TabsPane::setTransform(uint32_t posX, uint32_t posY, uint32_t width, 
 	}
 }
 
-void fxed::TabsPane::scroll(fxed::Mouse &mouse, int deltaX, int deltaY) {
+void fxed::TabsPane::scroll(fxed::Mouse &mouse, double deltaX, double deltaY) {
 	if (!tabs.empty()) {
 		assert(activeTab >= 0 && activeTab < tabs.size());
 		tabs[activeTab]->scroll(mouse, deltaX, deltaY);

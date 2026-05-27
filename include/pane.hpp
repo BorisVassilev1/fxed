@@ -44,7 +44,7 @@ class Pane {
 
 	virtual void resize(uint32_t newWidth, uint32_t newHeight);
 	virtual void setTransform(uint32_t posX, uint32_t posY, uint32_t width, uint32_t height);
-	virtual void scroll(fxed::Mouse &mouse, int deltaX, int deltaY);
+	virtual void scroll(fxed::Mouse &mouse, double deltaX, double deltaY);
 	virtual void mouseClick(fxed::Mouse &mouse, int button, int action, int mods);
 	virtual void mouseMove(fxed::Mouse &mouse, double deltaX, double deltaY);
 	virtual void charInput(unsigned int codepoint);
@@ -70,7 +70,7 @@ class TextPane : public Pane {
 	TextPane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width, uint32_t height, TextRenderer &textRenderer);
 	void render(nri::CommandBuffer &cmdBuf) override;
 
-	void scroll(fxed::Mouse &mouse, int deltaX, int deltaY) override;
+	void scroll(fxed::Mouse &mouse, double deltaX, double deltaY) override;
 	void resize(uint32_t newWidth, uint32_t newHeight) override;
 	void setTransform(uint32_t posX, uint32_t posY, uint32_t width, uint32_t height) override;
 	void updateText(const std::u32string &text);
@@ -127,7 +127,7 @@ class SplitPane : public Pane {
 	void setTransform(uint32_t posX, uint32_t posY, uint32_t width, uint32_t height) override;
 	void mouseClick(fxed::Mouse &mouse, int button, int action, int mods) override;
 	void mouseMove(fxed::Mouse &mouse, double deltaX, double deltaY) override;
-	void scroll(fxed::Mouse &mouse, int deltaX, int deltaY) override;
+	void scroll(fxed::Mouse &mouse, double deltaX, double deltaY) override;
 
 	void				   setSplitRatio(float ratio);
 	void				   setVertical(bool isVertical);
@@ -175,7 +175,7 @@ class TabsPane : public Pane {
 
 	void resize(uint32_t newWidth, uint32_t newHeight) override;
 	void setTransform(uint32_t posX, uint32_t posY, uint32_t width, uint32_t height) override;
-	void scroll(fxed::Mouse &mouse, int deltaX, int deltaY) override;
+	void scroll(fxed::Mouse &mouse, double deltaX, double deltaY) override;
 	void mouseMove(fxed::Mouse &mouse, double deltaX, double deltaY) override;
 
 	void								setActiveTab(uint32_t index);
