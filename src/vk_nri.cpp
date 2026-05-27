@@ -880,8 +880,8 @@ std::unique_ptr<CommandQueue> VulkanNRI::createCommandQueue() {
 	return std::make_unique<VulkanCommandQueue>(vkraii::Queue(device.device, queue));
 };
 
-VulkanWindow::VulkanWindow(VulkanNRI &nri)
-	: Window(nri),
+VulkanWindow::VulkanWindow(VulkanNRI &nri, Window::SurfaceSizeGetter surfaceSizeGetter)
+	: Window(nri, surfaceSizeGetter),
 	  surface(nullptr),
 	  swapChain(),
 	  presentQueue(nullptr),
@@ -951,9 +951,7 @@ void VulkanWindow::setSurface(vkraii::SurfaceKHR &&surface) {
 }
 
 void VulkanWindow::createSwapChain(uint32_t &width, uint32_t &height) {
-	this->width	 = width;
-	this->height = height;
-	auto &nri	 = static_cast<VulkanNRI &>(this->nri);
+	auto &nri = static_cast<VulkanNRI &>(this->nri);
 	if (this->surface == nullptr) { THROW_RUNTIME_ERR("surface is not set for VulkanWindow!"); }
 
 	vk::SurfaceCapabilitiesKHR capabilities;
@@ -964,9 +962,18 @@ void VulkanWindow::createSwapChain(uint32_t &width, uint32_t &height) {
 		swapChain = vkb::Swapchain();
 		return;
 	}
+	auto windowExtent = surfaceSizeGetter();
+	if (windowExtent.x == 0 || windowExtent.x == 0) {
+		dbLog(dbg::LOG_ERROR, "Window has zero width or height! Cannot create swapchain.");
+		if (swapChain) vkb::destroy_swapchain(swapChain);
+		swapChain = vkb::Swapchain();
+		return;
+	}
 
-	width  = capabilities.maxImageExtent.width;
-	height = capabilities.maxImageExtent.height;
+	width  = std::clamp(windowExtent.x, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
+	height = std::clamp(windowExtent.y, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
+	this->width	 = width;
+	this->height = height;
 
 	vkb::SwapchainBuilder swapchainBuilder{nri.getPhysicalDevice(), nri.getDevice(), *surface};
 	swapchainBuilder.set_desired_present_mode((VkPresentModeKHR)vk::PresentModeKHR::eFifo);
@@ -1008,6 +1015,7 @@ void VulkanWindow::createSwapChain(uint32_t &width, uint32_t &height) {
 			*commandBuffer, vk::ImageLayout::ePresentSrcKHR, vk::AccessFlagBits::eNone, vk::AccessFlagBits::eNone,
 			vk::PipelineStageFlagBits::eTopOfPipe, vk::PipelineStageFlagBits::eBottomOfPipe);
 	}
+	needsResize = false;
 }
 
 bool VulkanWindow::beginFrame() {
@@ -1018,7 +1026,7 @@ bool VulkanWindow::beginFrame() {
 	assert(result == vk::Result::eSuccess);
 
 	if (swapChain == nullptr) {
-		createSwapChain(width, height);
+		createSwapChain(this->width, this->height);
 		return false;
 	}
 	result = (vk::Result)vkResetFences(nri.getDevice(), 1, (VkFence *)&*inFlightFence);
@@ -1067,11 +1075,15 @@ void VulkanWindow::endFrame() {
 		case vk::Result::eErrorOutOfDateKHR:
 		case vk::Result::eSuboptimalKHR:
 			vkDeviceWaitIdle(nri.getDevice());
-			uint32_t width, height;
-			createSwapChain(width, height);
+			createSwapChain(this->width, this->height);
 			break;
 		case vk::Result::eErrorSurfaceLostKHR: break;
 		default: assert(res == vk::Result::eSuccess);
+	}
+
+	if (needsResize) {
+		vkDeviceWaitIdle(nri.getDevice());
+		createSwapChain(this->width, this->height);
 	}
 
 	vkQueueWaitIdle(*presentQueue.queue);
@@ -1443,7 +1455,11 @@ std::unique_ptr<Window> VulkanNRI::createGLFWWindow(GLFWwindow *glfwWindow) {
 		}
 		surface = vk::SurfaceKHR(cSurface);
 	}
-	auto window = std::make_unique<VulkanWindow>(*this);
+	auto window = std::make_unique<VulkanWindow>(*this, [glfwWindow] {
+		int width, height;
+		glfwGetFramebufferSize(glfwWindow, &width, &height);
+		return glm::uvec2(width, height);
+	});
 	window->setSurface(vkraii::SurfaceKHR(instance.instance, surface));
 
 	vk::Bool32 presentSupport;

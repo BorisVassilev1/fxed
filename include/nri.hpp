@@ -433,7 +433,7 @@ class CommandBuffer {
 	virtual void end()	 = 0;
 
 	virtual void setViewport(float x, float y, float width, float height, float minDepth, float maxDepth) = 0;
-	virtual void setScissor(int32_t x, int32_t y, uint32_t width, uint32_t height) = 0;
+	virtual void setScissor(int32_t x, int32_t y, uint32_t width, uint32_t height)						  = 0;
 };
 
 class ProgramBuilder {
@@ -526,12 +526,17 @@ class ImageAndAllocation {
 // };
 
 class Window {
+   public:
+	using SurfaceSizeGetter = std::function<glm::uvec2(void)>;
+
    protected:
-	NRI &nri;
+	NRI				 &nri;
+	SurfaceSizeGetter surfaceSizeGetter;
+	bool	 needsResize = false;
 
    public:
 	virtual ~Window() {}
-	Window(NRI &nri) : nri(nri) {}
+	Window(NRI &nri, SurfaceSizeGetter getter);
 
 	virtual bool			beginFrame()			  = 0;
 	virtual void			endFrame()				  = 0;
@@ -543,6 +548,9 @@ class Window {
 
 	virtual CommandQueue &getMainQueue() = 0;
 	glm::vec4			  clearColor	 = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+
+	void setSurfaceSizeGetter(SurfaceSizeGetter getter);
+	void setNeedsResize();
 };
 
 }	  // namespace nri

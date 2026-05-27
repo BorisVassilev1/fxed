@@ -345,7 +345,7 @@ class VulkanWindow : public Window {
 
    protected:
    public:
-	VulkanWindow(VulkanNRI &nri);
+	VulkanWindow(VulkanNRI &nri, Window::SurfaceSizeGetter surfaceSizeGetter);
 	~VulkanWindow();
 
 	void			createSwapChain(uint32_t &width, uint32_t &height);

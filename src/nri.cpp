@@ -45,4 +45,9 @@ ResourceHandle ImageView::getHandle() {
 	}
 	return handle;
 }
+
+Window::Window(NRI &nri, SurfaceSizeGetter getter) : nri(nri), surfaceSizeGetter(getter) {}
+void Window::setSurfaceSizeGetter(Window::SurfaceSizeGetter getter) { this->surfaceSizeGetter = getter; }
+void Window::setNeedsResize() { needsResize = true; }
+
 }	  // namespace nri

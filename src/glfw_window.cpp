@@ -14,16 +14,6 @@ Window::Window(nri::NRI &nri, int width, int height, const char *name, bool vsyn
 	: width(width), height(height) {
 	assert(glfwGetPrimaryMonitor() != NULL);
 
-	//const GLFWvidmode *mode = glfwGetVideoMode(monitor ? monitor : glfwGetPrimaryMonitor());
-
-	//glfwWindowHint(GLFW_RED_BITS, mode->redBits);
-	//glfwWindowHint(GLFW_GREEN_BITS, mode->greenBits);
-	//glfwWindowHint(GLFW_BLUE_BITS, mode->blueBits);
-	//glfwWindowHint(GLFW_REFRESH_RATE, mode->refreshRate);
-
-	//glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER, GLFW_TRUE);
-	//glfwWindowHint(GLFW_SCALE_TO_MONITOR, GLFW_TRUE);
-
 	if (resizable) glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 	else glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
@@ -40,13 +30,11 @@ Window::Window(nri::NRI &nri, int width, int height, const char *name, bool vsyn
 	glfwSetWindowSizeCallback(window, handleResize);
 	addResizeCallback([this](GLFWwindow *window, int width, int height) {
 		if (window != getHandle()) return;
+		bool flag	 = this->width != width || this->height != height;
 		this->width	 = width;
 		this->height = height;
+		if (flag && nriWindow) { nriWindow->setNeedsResize(); }
 	});
-
-	// glfwMakeContextCurrent(window);
-
-	//glfwSwapInterval(vsync);
 
 	nriWindow = nri.createGLFWWindow(window);
 }
@@ -77,11 +65,10 @@ void Window::setShouldClose(bool b) { glfwSetWindowShouldClose(window, b); }
 void Window::setEnableViewports(bool b) { this->enableViewports = b; }
 
 void Window::swapBuffers() {
-
 	auto	  timeNow = std::chrono::high_resolution_clock::now();
 	long long delta	  = std::chrono::duration_cast<std::chrono::nanoseconds>(timeNow - lastSwapTime).count();
 
-	//glfwSwapBuffers(window);
+	// glfwSwapBuffers(window);
 
 	timeNow				= std::chrono::high_resolution_clock::now();
 	long long fullDelta = std::chrono::duration_cast<std::chrono::nanoseconds>(timeNow - lastSwapTime).count();
@@ -102,7 +89,7 @@ void Window::swapBuffers() {
 }
 
 void Window::beginFrame() {
-	//glfwWaitEvents();
+	// glfwWaitEvents();
 	glfwPollEvents();
 }
 
@@ -129,7 +116,7 @@ void Window::addResizeCallback(const std::function<void(GLFWwindow *, int, int)>
 }
 
 void Window::defaultFrameCallback(long draw_time, long frame_time, long frames) {
-	//std::cout << std::fixed << std::setprecision(2) << "\rdraw time: " << (draw_time / 1e6) << "ms, FPS: " << frames
+	// std::cout << std::fixed << std::setprecision(2) << "\rdraw time: " << (draw_time / 1e6) << "ms, FPS: " << frames
 	//		  << "         " << std::flush;		//<< std::endl;
 }
 
