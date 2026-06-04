@@ -1,6 +1,7 @@
 #include <functional>
 #include <thread>
 #include <optional>
+#include <ostream>
 
 namespace nri {
 class Timer {
@@ -30,4 +31,26 @@ class Timer {
 
 	~Timer() { running = 0; }
 };
+
+class Stopwatch {
+	std::chrono::steady_clock::time_point startTime;
+	std::ostream						 &out;
+	std::string_view					  name;
+	bool								  stopped = false;
+
+   public:
+	inline Stopwatch(std::ostream &out, std::string_view name = "")
+		: startTime(std::chrono::steady_clock::now()), out(out), name(name) {}
+
+	~Stopwatch() { stop(); }
+
+	inline void stop() {
+		if (stopped) return;
+		auto endTime  = std::chrono::steady_clock::now();
+		auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+		out << name << "Elapsed time: " << duration << " ms" << std::endl;
+		stopped = true;
+	}
+};
+
 }	  // namespace nri

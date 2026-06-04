@@ -5,6 +5,7 @@
 #include "editor.hpp"
 #include "file_tree.hpp"
 #include "mesh.hpp"
+#include "nri.hpp"
 #include "text_rendering.hpp"
 #include "utf8_convert.hpp"
 
@@ -133,6 +134,7 @@ void fxed::TextPane::scroll(fxed::Mouse &mouse, double deltaX, double deltaY) {
 }
 
 void fxed::TextPane::resize(uint32_t newWidth, uint32_t newHeight) {
+	if (newWidth == (uint32_t)size.x && newHeight == (uint32_t)size.y) return;
 	Pane::resize(newWidth, newHeight);
 	renderState.viewportSize = {newWidth, newHeight};
 	if (wordWrap) updateText(text);
@@ -150,6 +152,7 @@ void fxed::TextPane::updateText(const std::u32string &text) {
 		wordWrap ? getWidth() - 2 * borderSize : 0);
 	textRenderer.getFont().syncWithGPU();
 }
+
 void fxed::TextPane::updateText(fxed::any_input_range<char32_t> &&text) {
 	this->text.clear();
 	std::ranges::copy(text, std::back_inserter(this->text));
