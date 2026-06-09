@@ -1,13 +1,6 @@
 #include "font.hpp"
 #include <format>
 
-#include <msdf-atlas-gen/msdf-atlas-gen.h>
-#include <msdfgen/ext/import-font.cpp>	   // WHY IS THIS NEEDED?? This is intentional
-
-#include "core/SDFTransformation.h"
-#include "core/generator-config.h"
-#include "ext/import-font.h"
-#include "msdfgen.h"
 #include "nri.hpp"
 #include "packing.hpp"
 #include "utils.hpp"
@@ -19,6 +12,41 @@
 #include "stb_image_resize.h"
 
 using namespace fxed;
+
+// copy pasta from msdfgen
+/// Reference to a 2D image bitmap or a buffer acting as one. Pixel storage not owned or managed by the object.
+template <typename T, int N = 1>
+struct BitmapRef {
+
+    T *pixels;
+    int width, height;
+
+    inline BitmapRef() : pixels(NULL), width(0), height(0) { }
+    inline BitmapRef(T *pixels, int width, int height) : pixels(pixels), width(width), height(height) { }
+
+    inline T *operator()(int x, int y) const {
+        return pixels+N*(width*y+x);
+    }
+
+};
+
+// copy pasta from msdfgen Constant reference to a 2D image bitmap or a buffer acting as one. Pixel storage not owned or managed by the object.
+template <typename T, int N = 1>
+struct BitmapConstRef {
+
+    const T *pixels;
+    int width, height;
+
+    inline BitmapConstRef() : pixels(NULL), width(0), height(0) { }
+    inline BitmapConstRef(const T *pixels, int width, int height) : pixels(pixels), width(width), height(height) { }
+    inline BitmapConstRef(const BitmapRef<T, N> &orig) : pixels(orig.pixels), width(orig.width), height(orig.height) { }
+
+    inline const T *operator()(int x, int y) const {
+        return pixels+N*(width*y+x);
+    }
+
+};
+
 
 class ImageAtlasStorage {
 	mutable std::unique_ptr<nri::Buffer>	 uploadBuffer;
@@ -55,7 +83,7 @@ class ImageAtlasStorage {
 		}
 	}
 
-	void put(int x, int y, const msdfgen::BitmapConstRef<float, 4> &subBitmap) {
+	void put(int x, int y, const BitmapConstRef<float, 4> &subBitmap) {
 		assert(data != nullptr);
 		assert(x + subBitmap.width <= width && y + subBitmap.height <= height);		// FIX BOUNDS CHECK
 		for (int j = 0; j < subBitmap.height; ++j) {
@@ -72,7 +100,7 @@ class ImageAtlasStorage {
 		}
 	}
 
-	void put_flipy(int x, int y, const msdfgen::BitmapConstRef<float, 3> &subBitmap) {
+	void put_flipy(int x, int y, const BitmapConstRef<float, 3> &subBitmap) {
 		assert(data != nullptr);
 		assert(x + subBitmap.width <= width && y + subBitmap.height <= height);		// FIX BOUNDS CHECK
 		for (int _j = 0; _j < subBitmap.height; ++_j) {
@@ -89,7 +117,7 @@ class ImageAtlasStorage {
 		}
 	}
 
-	void put(int x, int y, const msdfgen::BitmapConstRef<float, 1> &subBitmap) {
+	void put(int x, int y, const BitmapConstRef<float, 1> &subBitmap) {
 		assert(data != nullptr);
 		assert(x + subBitmap.width <= width && y + subBitmap.height <= height);		// FIX BOUNDS CHECK
 		for (int j = 0; j < subBitmap.height; ++j) {
@@ -99,7 +127,7 @@ class ImageAtlasStorage {
 		}
 	}
 
-	void put(int x, int y, const msdfgen::BitmapConstRef<uint8_t, 1> &subBitmap) {
+	void put(int x, int y, const BitmapConstRef<uint8_t, 1> &subBitmap) {
 		assert(data != nullptr);
 		assert(x + subBitmap.width <= width && y + subBitmap.height <= height);		// FIX BOUNDS CHECK
 		for (int j = 0; j < subBitmap.height; ++j) {
@@ -110,7 +138,7 @@ class ImageAtlasStorage {
 		}
 	}
 
-	void put(int x, int y, const msdfgen::BitmapConstRef<uint8_t, 4> &subBitmap) {
+	void put(int x, int y, const BitmapConstRef<uint8_t, 4> &subBitmap) {
 		assert(data != nullptr);
 		assert(x + subBitmap.width <= width && y + subBitmap.height <= height);		// FIX BOUNDS CHECK
 		for (int j = 0; j < subBitmap.height; ++j) {
@@ -128,7 +156,7 @@ class ImageAtlasStorage {
 		}
 	}
 
-	void get(int x, int y, const msdfgen::BitmapRef<float, 4> &subBitmap) const {
+	void get(int x, int y, const BitmapRef<float, 4> &subBitmap) const {
 		for (int j = 0; j < subBitmap.height; ++j) {
 			for (int i = 0; i < subBitmap.width; ++i) {
 				subBitmap.pixels[j * subBitmap.width * 4 + i * 4 + 0] =
@@ -143,7 +171,7 @@ class ImageAtlasStorage {
 		}
 	}
 
-	void get(int x, int y, const msdfgen::BitmapRef<float, 3> &subBitmap) const {
+	void get(int x, int y, const BitmapRef<float, 3> &subBitmap) const {
 		for (int j = 0; j < subBitmap.height; ++j) {
 			for (int i = 0; i < subBitmap.width; ++i) {
 				subBitmap.pixels[j * subBitmap.width * 3 + i * 3 + 0] =
@@ -156,7 +184,7 @@ class ImageAtlasStorage {
 		}
 	}
 
-	void get(int x, int y, const msdfgen::BitmapRef<float, 1> &subBitmap) const {
+	void get(int x, int y, const BitmapRef<float, 1> &subBitmap) const {
 		for (int j = 0; j < subBitmap.height; ++j) {
 			for (int i = 0; i < subBitmap.width; ++i) {
 				subBitmap.pixels[j * subBitmap.width + i] = ((T *)data)[(y + j) * width * N + (x * N) + i * N + 3];
@@ -178,13 +206,13 @@ class ImageAtlasStorage {
 
 struct FontAtlas::FontData {
 	std::vector<std::pair<GlyphBox, int>> glyphBoxes;
-	std::map<uint32_t, int>				  codepointToGlyphBoxIndex;
+	std::unordered_map<uint32_t, int>				  codepointToGlyphBoxIndex;
 	RowAtlasPacker						  atlasPacker;
 	ImageAtlasStorage					  atlasStorage;
 
 	FontData(uint32_t atlasSize, uint32_t fontSize, nri::NRI &nri)
 		: glyphBoxes(std::vector<std::pair<GlyphBox, int>>()),
-		  codepointToGlyphBoxIndex(std::map<uint32_t, int>()),
+		  codepointToGlyphBoxIndex(std::unordered_map<uint32_t, int>()),
 		  atlasPacker(RowAtlasPacker(atlasSize, atlasSize, fontSize + 2)),
 		  atlasStorage(ImageAtlasStorage(nri, atlasSize, atlasSize)) {}
 };
@@ -234,7 +262,7 @@ int FontAtlas::addGlyphToAtlas(uint32_t c) {
 				stbir_resize_uint8_generic(face->glyph->bitmap.buffer, width, height, face->glyph->bitmap.pitch,
 										   resizedBitmap.data(), w, h, w * 4, 4, 3, STBIR_FLAG_ALPHA_PREMULTIPLIED,
 										   STBIR_EDGE_ZERO, STBIR_FILTER_DEFAULT, STBIR_COLORSPACE_LINEAR, nullptr);
-				msdfgen::BitmapConstRef<uint8_t, 4> bitmap(resizedBitmap.data(), w, h);
+				BitmapConstRef<uint8_t, 4> bitmap(resizedBitmap.data(), w, h);
 				data->atlasStorage.put(box.rect.x, box.rect.y, bitmap);
 
 				return result;
@@ -256,34 +284,6 @@ int FontAtlas::addGlyphToAtlas(uint32_t c) {
 		box.bounds.t /= fontSize;
 		box.advance /= fontSize;
 
-		// if (fontSize == 32u) {
-		//	// use msdfgen
-		//	msdfgen::FontHandle *fontHandle = msdfgen::adoptFreetypeFont(face);
-
-		//	msdfgen::Shape shape;
-		//	double		   advance;
-		//	if (!msdfgen::loadGlyph(shape, fontHandle, c, &advance)) {
-		//		dbLog(dbg::LOG_ERROR, "Failed to load glyph for codepoint ", c, " with msdfgen");
-		//		return -1;
-		//	}
-
-		//	static float				 pixels[32 * 32 * 4];
-		//	msdfgen::BitmapRef<float, 3> bitmap(pixels, box.rect.w, box.rect.h);
-
-		//	msdfgen::Projection		 projection{msdfgen::Vector2(1.f, 1.f), msdfgen::Vector2(0, 0.125)};
-		//	msdfgen::DistanceMapping distanceMapping{msdfgen::Range{0, 1}};
-
-		//	msdfgen::SDFTransformation transformation{projection, distanceMapping};
-
-		//	msdfgen::MSDFGeneratorConfig config;
-
-		//	msdfgen::generateMSDF(bitmap, shape, transformation, config);
-		//	// start from top left corner, but msdfgen generates from bottom left, so flip vertically
-		//	// also adjust box position to account for the flipped bitmap
-		//	data->atlasStorage.put_flipy(box.rect.x, box.rect.y, bitmap);
-		//	return result;
-		//}
-
 		if (face->glyph->format == FT_GLYPH_FORMAT_OUTLINE)
 			if (int e = FT_Render_Glyph(face->glyph, FT_RENDER_MODE_NORMAL)) {
 				dbLog(dbg::LOG_ERROR, "Failed to render glyph for codepoint ", c, " error: 0x", std::hex, e, std::dec);
@@ -292,12 +292,12 @@ int FontAtlas::addGlyphToAtlas(uint32_t c) {
 
 		switch (face->glyph->bitmap.pixel_mode) {
 			case FT_PIXEL_MODE_GRAY: {
-				msdfgen::BitmapConstRef<uint8_t, 1> bitmap((const uint8_t *)face->glyph->bitmap.buffer,
+				BitmapConstRef<uint8_t, 1> bitmap((const uint8_t *)face->glyph->bitmap.buffer,
 														   face->glyph->bitmap.width, face->glyph->bitmap.rows);
 				data->atlasStorage.put(box.rect.x, box.rect.y, bitmap);
 			} break;
 			case FT_PIXEL_MODE_BGRA: {
-				msdfgen::BitmapConstRef<uint8_t, 4> bitmap((const uint8_t *)face->glyph->bitmap.buffer,
+				BitmapConstRef<uint8_t, 4> bitmap((const uint8_t *)face->glyph->bitmap.buffer,
 														   face->glyph->bitmap.width, face->glyph->bitmap.rows);
 				data->atlasStorage.put(box.rect.x, box.rect.y, bitmap);
 			} break;

@@ -4,12 +4,12 @@
 [submodule "lib/glfw"]
 	path = lib/glfw
 	url = https://github.com/glfw/glfw.git
-[submodule "lib/msdf-atlas-gen"]
-	path = lib/msdf-atlas-gen
-	url = https://github.com/Chlumsky/msdf-atlas-gen.git
 [submodule "lib/freetype"]
 	path = lib/freetype
 	url = https://github.com/freetype/freetype.git
 [submodule "lib/vk-bootstrap"]
 	path = lib/vk-bootstrap
 	url = https://github.com/charles-lunarg/vk-bootstrap
+[submodule "lib/libpng"]
+	path = lib/libpng
+	url = https://github.com/pnggroup/libpng.git
