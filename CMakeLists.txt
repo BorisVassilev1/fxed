@@ -71,20 +71,16 @@ set(PNG_FOUND TRUE CACHE BOOL "" FORCE)
 
 if(WIN32)
     set(_png_lib "${CMAKE_CURRENT_BINARY_DIR}/lib/libpng/libpng18_static.lib")
+    set(_png_lib_debug "${CMAKE_CURRENT_BINARY_DIR}/lib/libpng/libpng18_staticd.lib")
 else()
     set(_png_lib "${CMAKE_CURRENT_BINARY_DIR}/lib/libpng/libpng18.a")
-endif()
-if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-    if(WIN32)
-        set(_png_lib "${CMAKE_CURRENT_BINARY_DIR}/lib/libpng/libpng18_staticd.lib")
-    else()
-        set(_png_lib "${CMAKE_CURRENT_BINARY_DIR}/lib/libpng/libpng18d.a")
-    endif()
+    set(_png_lib_debug "${CMAKE_CURRENT_BINARY_DIR}/lib/libpng/libpng18d.a")
 endif()
 if(NOT TARGET PNG::PNG)
     add_library(PNG::PNG STATIC IMPORTED GLOBAL)
     set_target_properties(PNG::PNG PROPERTIES
         IMPORTED_LOCATION             "${_png_lib}"
+        IMPORTED_LOCATION_DEBUG       "${_png_lib_debug}"
         INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/lib/libpng;${CMAKE_CURRENT_BINARY_DIR}/lib/libpng"
 		INTERFACE_LINK_LIBRARIES      "png_static;m"
     )
