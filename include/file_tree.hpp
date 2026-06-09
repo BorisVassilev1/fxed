@@ -34,6 +34,7 @@ class FileTree {
 		void print(std::ostream &os, int indent = 0) const override;
 
 		void toggleOpen();
+		void setOpen(bool open);
 	};
 
    private:

@@ -466,7 +466,7 @@ void fxed::FileTreePane::keyInput(int key, int scancode, int action, int mods) {
 				--selectedRow;
 				this->renderState.cursorPos = glm::vec2(0, selectedRow);
 			}
-		} else if (key == GLFW_KEY_ENTER || key == GLFW_KEY_RIGHT) {
+		} else if (key == GLFW_KEY_ENTER) {
 			auto &node = *selectedIt;
 			if (auto *dirNode = dynamic_cast<fxed::FileTree::DirectoryNode *>(&node)) {
 				dirNode->toggleOpen();
@@ -476,6 +476,18 @@ void fxed::FileTreePane::keyInput(int key, int scancode, int action, int mods) {
 				std::filesystem::path filePath = currentPath / fileNode->path;
 				dbLog(dbg::LOG_INFO, "Selected file: ", filePath);
 				Editor::getInstance().openFile(filePath);
+			}
+		} else if (key == GLFW_KEY_RIGHT) {
+			auto &node = *selectedIt;
+			if (auto *dirNode = dynamic_cast<fxed::FileTree::DirectoryNode *>(&node)) {
+				dirNode->setOpen(true);
+				refreshListing();
+			}
+		} else if (key == GLFW_KEY_LEFT) {
+			auto &node = *selectedIt;
+			if (auto *dirNode = dynamic_cast<fxed::FileTree::DirectoryNode *>(&node)) {
+				dirNode->setOpen(false);
+				refreshListing();
 			}
 		}
 	}

@@ -69,6 +69,10 @@ void FileTree::DirectoryNode::toggleOpen() {
 	}
 }
 
+void FileTree::DirectoryNode::setOpen(bool open) {
+	if (opened != open) { toggleOpen(); }
+}
+
 FileTree::FileTree(const std::filesystem::path &rootPath) {
 	if (!std::filesystem::is_directory(rootPath)) { throw std::invalid_argument("Root path must be a directory"); }
 
