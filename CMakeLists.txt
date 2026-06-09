@@ -95,7 +95,15 @@ if(NOT TARGET Freetype::Freetype)
 endif()
 
 set(FREETYPE_FOUND TRUE)
-set(FREETYPE_LIBRARY "$<TARGET_FILE:freetype>")
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+	get_target_property(_freetype_debug_postfix freetype DEBUG_POSTFIX)
+	if(_freetype_debug_postfix STREQUAL "_freetype_debug_postfix-NOTFOUND")
+		set(_freetype_debug_postfix "")
+	endif()
+	set(FREETYPE_LIBRARY "${CMAKE_CURRENT_BINARY_DIR}/lib/freetype/${CMAKE_STATIC_LIBRARY_PREFIX}freetype${_freetype_debug_postfix}${CMAKE_STATIC_LIBRARY_SUFFIX}")
+else()
+	set(FREETYPE_LIBRARY "${CMAKE_CURRENT_BINARY_DIR}/lib/freetype/${CMAKE_STATIC_LIBRARY_PREFIX}freetype${CMAKE_STATIC_LIBRARY_SUFFIX}")
+endif()
 set(FREETYPE_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/lib/freetype/include")
 set(CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH ON)
 set(CMAKE_FIND_USE_CMAKE_SYSTEM_PATH ON)
@@ -132,4 +140,3 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
 	DBG_LOG_LEVEL=-1
 )
 #target_link_options(${PROJECT_NAME} PRIVATE -Wl,--verbose)
-
