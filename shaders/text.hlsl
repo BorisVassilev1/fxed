@@ -49,12 +49,6 @@ struct PSInput
 	nointerpolation uint glyphKind : SV_InstanceID;
 };
 
-float median(float3 msd)
-{
-	return max(min(msd.r, msd.g), min(max(msd.r, msd.g), msd.b));
-}
-
-
 [shader("pixel")]
 float4 PSMain(PSInput input) : SV_TARGET
 {
@@ -65,40 +59,14 @@ float4 PSMain(PSInput input) : SV_TARGET
 		texColor = float4(1.0, 1.0, 1.0, 1.0);
 	}
 
-
-	////float4 insideColor = float4(243/255.f, 139/255.f, 168/255.f, 1.0);
-	//float4 insideColor = float4(1.0, 1.0, 1.0, 1.0);
-	//float4 outsideColor = float4(30/255.f, 30/255.f, 46/255.f, 0.0);
-	////float4 outsideColor = float4(0,0,0, 1.0);
-	//float4 color = lerp(outsideColor, insideColor, w);
-
 	float3 baseColor = float3(1.0, 1.0, 1.0);
 	if(input.glyphKind == 1 || input.glyphKind == 2) {
 		baseColor = texColor.rgb;
 	}
 
-	//if(input.glyphKind == 2) {
-	//	float largeness = (pushConstants.textSize - 12.f) / 48.0f; // Assuming textSize ranges from 12 to 60
-	//	largeness = clamp(largeness, 0.0f, 1.0f);
-
-	//	//float Smoothing = lerp(1.0f, 0.5f, largeness);
-	//	float Smoothing = 1.0f;
-
-	//	float d = median(texColor.rgb) - 0.5f;
-
-	//	float pxr = d/fwidth(d) ;
-	//	float w = smoothstep(-Smoothing,Smoothing, pxr);
-	//	baseColor = lerp(float3(0.0, 0.0, 0.0), float3(1.0, 1.0, 1.0), w);
-	//}
-
-
 	float4 color;
 	color.xyz = baseColor * texColor.a; // Premultiply alpha for better blending
 	color.w = texColor.a;
-
-	// Calculate screen-space derivatives for proper antialiasing
-
-	// gamma correction
 
 	return float4(color);
 }

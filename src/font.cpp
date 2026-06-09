@@ -1,8 +1,10 @@
 #include "font.hpp"
 #include <format>
 
+#include "buffer_utils.hpp"
 #include "nri.hpp"
 #include "packing.hpp"
+#include "static_vector.hpp"
 #include "utils.hpp"
 
 #include "ft2build.h"
@@ -13,81 +15,53 @@
 
 using namespace fxed;
 
+// if uint is not a valid type, define it as unsigned int
+using uint = unsigned int;
+
 // copy pasta from msdfgen
 /// Reference to a 2D image bitmap or a buffer acting as one. Pixel storage not owned or managed by the object.
 template <typename T, int N = 1>
 struct BitmapRef {
+	T	*pixels;
+	uint width, height;
 
-    T *pixels;
-    int width, height;
+	inline BitmapRef() : pixels(NULL), width(0), height(0) {}
+	inline BitmapRef(T *pixels, int width, int height) : pixels(pixels), width(width), height(height) {}
 
-    inline BitmapRef() : pixels(NULL), width(0), height(0) { }
-    inline BitmapRef(T *pixels, int width, int height) : pixels(pixels), width(width), height(height) { }
-
-    inline T *operator()(int x, int y) const {
-        return pixels+N*(width*y+x);
-    }
-
+	inline T *operator()(int x, int y) const { return pixels + N * (width * y + x); }
 };
 
-// copy pasta from msdfgen Constant reference to a 2D image bitmap or a buffer acting as one. Pixel storage not owned or managed by the object.
+// copy pasta from msdfgen Constant reference to a 2D image bitmap or a buffer acting as one. Pixel storage not owned or
+// managed by the object.
 template <typename T, int N = 1>
 struct BitmapConstRef {
+	const T *pixels;
+	uint	 width, height;
 
-    const T *pixels;
-    int width, height;
+	inline BitmapConstRef() : pixels(NULL), width(0), height(0) {}
+	inline BitmapConstRef(const T *pixels, int width, int height) : pixels(pixels), width(width), height(height) {}
+	inline BitmapConstRef(const BitmapRef<T, N> &orig) : pixels(orig.pixels), width(orig.width), height(orig.height) {}
 
-    inline BitmapConstRef() : pixels(NULL), width(0), height(0) { }
-    inline BitmapConstRef(const T *pixels, int width, int height) : pixels(pixels), width(width), height(height) { }
-    inline BitmapConstRef(const BitmapRef<T, N> &orig) : pixels(orig.pixels), width(orig.width), height(orig.height) { }
-
-    inline const T *operator()(int x, int y) const {
-        return pixels+N*(width*y+x);
-    }
-
+	inline const T *operator()(int x, int y) const { return pixels + N * (width * y + x); }
 };
 
-
 class ImageAtlasStorage {
-	mutable std::unique_ptr<nri::Buffer>	 uploadBuffer;
-	mutable std::unique_ptr<nri::Allocation> uploadBufferAllocation;
-	mutable void							*data = nullptr;
-	uint32_t								 width;
-	uint32_t								 height;
+	mutable void *data = nullptr;
+	uint32_t	  width;
+	uint32_t	  height;
 
 	static const nri::Format format = nri::Format::FORMAT_R32G32B32A32_SFLOAT;
 	static const int		 N		= 4;
 	using T							= float;
 
    public:
-	ImageAtlasStorage(nri::NRI &nri, uint32_t width, uint32_t height) : width(width), height(height) {
-		dbLog(dbg::LOG_INFO, "Creating ImageAtlasStorage ", width, "x", height);
-		uploadBuffer = nri.createBuffer(width * height * N * sizeof(T), nri::BUFFER_USAGE_TRANSFER_SRC);
-		uploadBufferAllocation =
-			nri.allocateMemory(uploadBuffer->getMemoryRequirements().setTypeRequest(nri::MEMORY_TYPE_UPLOAD));
-		uploadBuffer->bindMemory(*uploadBufferAllocation, 0);
-		data = uploadBuffer->map(0, uploadBuffer->getSize());
-	}
-
-	~ImageAtlasStorage() { unmap(); }
-
-	void remap() {
-		unmap();
-		data = uploadBuffer->map(0, uploadBuffer->getSize());
-	}
-
-	void unmap() {
-		if (data) {
-			if (uploadBuffer) uploadBuffer->unmap();
-			data = nullptr;
-		}
-	}
+	ImageAtlasStorage(uint32_t width, uint32_t height, void *data) : data(data), width(width), height(height) {}
 
 	void put(int x, int y, const BitmapConstRef<float, 4> &subBitmap) {
 		assert(data != nullptr);
 		assert(x + subBitmap.width <= width && y + subBitmap.height <= height);		// FIX BOUNDS CHECK
-		for (int j = 0; j < subBitmap.height; ++j) {
-			for (int i = 0; i < subBitmap.width; ++i) {
+		for (uint j = 0; j < subBitmap.height; ++j) {
+			for (uint i = 0; i < subBitmap.width; ++i) {
 				((T *)data)[(y + j) * width * N + (x * N) + i * N + 0] =
 					subBitmap.pixels[j * subBitmap.width * 4 + i * 4 + 0];
 				((T *)data)[(y + j) * width * N + (x * N) + i * N + 1] =
@@ -103,8 +77,8 @@ class ImageAtlasStorage {
 	void put_flipy(int x, int y, const BitmapConstRef<float, 3> &subBitmap) {
 		assert(data != nullptr);
 		assert(x + subBitmap.width <= width && y + subBitmap.height <= height);		// FIX BOUNDS CHECK
-		for (int _j = 0; _j < subBitmap.height; ++_j) {
-			for (int i = 0; i < subBitmap.width; ++i) {
+		for (uint _j = 0; _j < subBitmap.height; ++_j) {
+			for (uint i = 0; i < subBitmap.width; ++i) {
 				auto j = subBitmap.height - 1 - _j;
 				((T *)data)[(y + _j) * width * N + (x * N) + i * N + 0] =
 					subBitmap.pixels[j * subBitmap.width * 3 + i * 3 + 0];
@@ -120,8 +94,8 @@ class ImageAtlasStorage {
 	void put(int x, int y, const BitmapConstRef<float, 1> &subBitmap) {
 		assert(data != nullptr);
 		assert(x + subBitmap.width <= width && y + subBitmap.height <= height);		// FIX BOUNDS CHECK
-		for (int j = 0; j < subBitmap.height; ++j) {
-			for (int i = 0; i < subBitmap.width; ++i) {
+		for (uint j = 0; j < subBitmap.height; ++j) {
+			for (uint i = 0; i < subBitmap.width; ++i) {
 				((T *)data)[(y + j) * width * N + (x * N) + i * N + 3] = subBitmap.pixels[j * subBitmap.width + i];
 			}
 		}
@@ -130,8 +104,8 @@ class ImageAtlasStorage {
 	void put(int x, int y, const BitmapConstRef<uint8_t, 1> &subBitmap) {
 		assert(data != nullptr);
 		assert(x + subBitmap.width <= width && y + subBitmap.height <= height);		// FIX BOUNDS CHECK
-		for (int j = 0; j < subBitmap.height; ++j) {
-			for (int i = 0; i < subBitmap.width; ++i) {
+		for (uint j = 0; j < subBitmap.height; ++j) {
+			for (uint i = 0; i < subBitmap.width; ++i) {
 				((T *)data)[(y + j) * width * N + (x * N) + i * N + 3] =
 					subBitmap.pixels[j * subBitmap.width + i] / 255.f;
 			}
@@ -141,9 +115,8 @@ class ImageAtlasStorage {
 	void put(int x, int y, const BitmapConstRef<uint8_t, 4> &subBitmap) {
 		assert(data != nullptr);
 		assert(x + subBitmap.width <= width && y + subBitmap.height <= height);		// FIX BOUNDS CHECK
-		for (int j = 0; j < subBitmap.height; ++j) {
-			for (int i = 0; i < subBitmap.width; ++i) {
-				uint32_t value = subBitmap.pixels[j * subBitmap.width + i];
+		for (uint j = 0; j < subBitmap.height; ++j) {
+			for (uint i = 0; i < subBitmap.width; ++i) {
 				((T *)data)[(y + j) * width * N + (x * N) + i * N + 0] =
 					subBitmap.pixels[j * subBitmap.width * 4 + i * 4 + 2] / 255.f;
 				((T *)data)[(y + j) * width * N + (x * N) + i * N + 1] =
@@ -157,8 +130,8 @@ class ImageAtlasStorage {
 	}
 
 	void get(int x, int y, const BitmapRef<float, 4> &subBitmap) const {
-		for (int j = 0; j < subBitmap.height; ++j) {
-			for (int i = 0; i < subBitmap.width; ++i) {
+		for (uint j = 0; j < subBitmap.height; ++j) {
+			for (uint i = 0; i < subBitmap.width; ++i) {
 				subBitmap.pixels[j * subBitmap.width * 4 + i * 4 + 0] =
 					((T *)data)[(y + j) * width * N + (x * N) + i * N + 0];
 				subBitmap.pixels[j * subBitmap.width * 4 + i * 4 + 1] =
@@ -172,8 +145,8 @@ class ImageAtlasStorage {
 	}
 
 	void get(int x, int y, const BitmapRef<float, 3> &subBitmap) const {
-		for (int j = 0; j < subBitmap.height; ++j) {
-			for (int i = 0; i < subBitmap.width; ++i) {
+		for (uint j = 0; j < subBitmap.height; ++j) {
+			for (uint i = 0; i < subBitmap.width; ++i) {
 				subBitmap.pixels[j * subBitmap.width * 3 + i * 3 + 0] =
 					((T *)data)[(y + j) * width * N + (x * N) + i * N + 0];
 				subBitmap.pixels[j * subBitmap.width * 3 + i * 3 + 1] =
@@ -185,8 +158,8 @@ class ImageAtlasStorage {
 	}
 
 	void get(int x, int y, const BitmapRef<float, 1> &subBitmap) const {
-		for (int j = 0; j < subBitmap.height; ++j) {
-			for (int i = 0; i < subBitmap.width; ++i) {
+		for (uint j = 0; j < subBitmap.height; ++j) {
+			for (uint i = 0; i < subBitmap.width; ++i) {
 				subBitmap.pixels[j * subBitmap.width + i] = ((T *)data)[(y + j) * width * N + (x * N) + i * N + 3];
 			}
 		}
@@ -198,23 +171,19 @@ class ImageAtlasStorage {
 	}
 
 	uint32_t getStride() const { return width * N * sizeof(T); }
-
-	// this is hack
-	auto &getUploadBuffer() const { return uploadBuffer; }
-	auto &getUploadBufferAllocation() const { return uploadBufferAllocation; }
 };
 
 struct FontAtlas::FontData {
-	std::vector<std::pair<GlyphBox, int>> glyphBoxes;
-	std::unordered_map<uint32_t, int>				  codepointToGlyphBoxIndex;
-	RowAtlasPacker						  atlasPacker;
-	ImageAtlasStorage					  atlasStorage;
+	StaticVector<std::pair<GlyphBox, int>> glyphBoxes;
+	std::unordered_map<uint32_t, int>	   codepointToGlyphBoxIndex;
+	RowAtlasPacker						   atlasPacker;
+	ImageAtlasStorage					   atlasStorage;
 
-	FontData(uint32_t atlasSize, uint32_t fontSize, nri::NRI &nri)
-		: glyphBoxes(std::vector<std::pair<GlyphBox, int>>()),
+	FontData(uint32_t atlasSize, uint32_t fontSize, void *imageData, void *glyphGeometryData, std::size_t maxGlyphCount)
+		: glyphBoxes(glyphGeometryData, maxGlyphCount),
 		  codepointToGlyphBoxIndex(std::unordered_map<uint32_t, int>()),
 		  atlasPacker(RowAtlasPacker(atlasSize, atlasSize, fontSize + 2)),
-		  atlasStorage(ImageAtlasStorage(nri, atlasSize, atlasSize)) {}
+		  atlasStorage(ImageAtlasStorage(atlasSize, atlasSize, imageData)) {}
 };
 
 struct FontFallbackChain::FontFallbackChainData {
@@ -223,10 +192,14 @@ struct FontFallbackChain::FontFallbackChainData {
 
 int FontAtlas::addGlyphToAtlas(uint32_t c) {
 	try {
-		data->glyphBoxes.push_back(this->fallbackChain.getGlyphBox(c, fontSize));
+		auto *added = data->glyphBoxes.push_back(this->fallbackChain.getGlyphBox(c, fontSize));
+		if (!added) {
+			dbLog(dbg::LOG_ERROR, "Failed to add glyph for codepoint ", c, " to atlas: max glyph count exceeded");
+			return -1;
+		}
 
-		auto &box	= data->glyphBoxes.back().first;
-		auto &index = data->glyphBoxes.back().second;
+		auto &box	= added->first;
+		auto &index = added->second;
 		auto &face	= this->fallbackChain.data->fontFaces[index];
 
 		auto result						  = data->glyphBoxes.size() - 1;
@@ -293,12 +266,12 @@ int FontAtlas::addGlyphToAtlas(uint32_t c) {
 		switch (face->glyph->bitmap.pixel_mode) {
 			case FT_PIXEL_MODE_GRAY: {
 				BitmapConstRef<uint8_t, 1> bitmap((const uint8_t *)face->glyph->bitmap.buffer,
-														   face->glyph->bitmap.width, face->glyph->bitmap.rows);
+												  face->glyph->bitmap.width, face->glyph->bitmap.rows);
 				data->atlasStorage.put(box.rect.x, box.rect.y, bitmap);
 			} break;
 			case FT_PIXEL_MODE_BGRA: {
 				BitmapConstRef<uint8_t, 4> bitmap((const uint8_t *)face->glyph->bitmap.buffer,
-														   face->glyph->bitmap.width, face->glyph->bitmap.rows);
+												  face->glyph->bitmap.width, face->glyph->bitmap.rows);
 				data->atlasStorage.put(box.rect.x, box.rect.y, bitmap);
 			} break;
 			default: {
@@ -316,27 +289,28 @@ int FontAtlas::addGlyphToAtlas(uint32_t c) {
 }
 
 FontAtlas::FontAtlas(nri::NRI &nri, nri::CommandQueue &q, FontFallbackChain &&fallbackChain, uint32_t atlasSize,
-					 uint32_t fontSize)
-	: data(new FontData(atlasSize, fontSize, nri)),
+					 uint32_t fontSize, uint32_t maxGlyphCount)
+	: data(nullptr),
 	  fallbackChain(std::move(fallbackChain)),
 	  nri(nri),
 	  q(q),
-	  fontSize(fontSize) {
-	std::unique_ptr<nri::Buffer>	 &uploadBuffer			 = data->atlasStorage.getUploadBuffer();
-	std::unique_ptr<nri::Allocation> &uploadBufferAllocation = data->atlasStorage.getUploadBufferAllocation();
-
-	if (uploadBuffer == nullptr || uploadBufferAllocation == nullptr) {
-		dbLog(dbg::LOG_ERROR, "Failed to create font image: upload buffer is null");
-		THROW_RUNTIME_ERR("Failed to create font image: upload buffer is null");
-	}
-
+	  fontSize(fontSize),
+	  maxGlyphCount(maxGlyphCount) {
 	image = nri.createImage2D(atlasSize, atlasSize, nri::FORMAT_R32G32B32A32_SFLOAT,
 							  nri::IMAGE_USAGE_SAMPLED | nri::IMAGE_USAGE_TRANSFER_DST);
+	glyphGeometryBuffer =
+		nri.createBuffer(maxGlyphCount * sizeof(GlyphBox), nri::BUFFER_USAGE_STORAGE | nri::BUFFER_USAGE_TRANSFER_DST);
 
-	imageAllocation = nri.allocateMemory(image->getMemoryRequirements().setTypeRequest(nri::MEMORY_TYPE_DEVICE));
-	image->bindMemory(*imageAllocation, 0);
+	auto [offsets, memReq] = getBufferOffsets(*image, *glyphGeometryBuffer);
+	gpuAllocation		   = allocateBindMemory(nri, nri::MEMORY_TYPE_DEVICE, *image, *glyphGeometryBuffer);
 
 	imageView = image->createTextureView();
+
+	uploadBuffer	 = nri.createBuffer(memReq.size, nri::BUFFER_USAGE_TRANSFER_SRC);
+	uploadAllocation = allocateBindMemory(nri, nri::MEMORY_TYPE_UPLOAD, *uploadBuffer);
+	char *uploadData = (char *)uploadAllocation->map();
+
+	data = new FontData(atlasSize, fontSize, uploadData + offsets[0], uploadData + offsets[1], maxGlyphCount);
 
 	uploadAtlasToGPU();
 }
@@ -348,6 +322,7 @@ void FontAtlas::resize(uint32_t newSize) {
 	newSize		 = std::min(newSize, 32u);
 	if (oldSize == newSize) return;
 
+	dbLog(dbg::LOG_INFO, "glyphboxes count before resize: ", data->glyphBoxes.size());
 	data->glyphBoxes.clear();
 	data->atlasPacker.setRowHeight(newSize + 2);
 
@@ -356,6 +331,7 @@ void FontAtlas::resize(uint32_t newSize) {
 	for (auto [c, _] : data->codepointToGlyphBoxIndex) {
 		addGlyphToAtlas(c);
 	}
+	dbLog(dbg::LOG_INFO, "glyphboxes count after resize: ", data->glyphBoxes.size());
 
 	uploadAtlasToGPU();
 }
@@ -367,15 +343,15 @@ void FontAtlas::syncWithGPU() {
 }
 
 void FontAtlas::uploadAtlasToGPU() {
-	auto &uploadBuffer = data->atlasStorage.getUploadBuffer();
-	data->atlasStorage.remap();
-
 	nri::CommandPool &commandPool	= nri.getDefaultCommandPool();
 	auto			  commandBuffer = nri.createCommandBuffer(commandPool);
 	commandBuffer->begin();
 	image->prepareForTransferDst(*commandBuffer);
 	image->copyFrom(*commandBuffer, *uploadBuffer, 0, data->atlasStorage.getStride() / sizeof(float) / 4);
 	image->prepareForTexture(*commandBuffer);
+	if (!data->glyphBoxes.empty())
+		glyphGeometryBuffer->copyFrom(*commandBuffer, *uploadBuffer, glyphGeometryBuffer->getOffset(), 0,
+									  data->glyphBoxes.size() * (sizeof(GlyphBox) + sizeof(int)));
 	commandBuffer->end();
 
 	auto key = q.submit(*commandBuffer);
@@ -384,26 +360,24 @@ void FontAtlas::uploadAtlasToGPU() {
 
 static const int tabSize = 4;
 
-fxed::GlyphBox FontAtlas::getGlyphBox(uint32_t c) {
+std::pair<fxed::GlyphBox, int> FontAtlas::getGlyphBox(uint32_t c) {
 	auto it = data->codepointToGlyphBoxIndex.find(c);
 	if (it != data->codepointToGlyphBoxIndex.end()) {
-		return data->glyphBoxes[it->second].first;
+		assert(it->second >= 0 && it->second < (int)data->glyphBoxes.size());
+		return {data->glyphBoxes[it->second].first, it->second};
 	} else if (c == U'\t') {
-		auto spaceBox = getGlyphBox(U' ');
-		return GlyphBox{.index	  = -1,
-						.advance  = spaceBox.advance * tabSize,
-						.bounds	  = {0, spaceBox.bounds.t, spaceBox.advance * tabSize, spaceBox.bounds.b},
-						.rect	  = {0, 0, 0, 0},
-						.isBitmap = false};
+		auto [spaceBox, i] = getGlyphBox(U' ');
+		return {GlyphBox{.bounds   = {0, spaceBox.bounds.t, spaceBox.advance * tabSize, spaceBox.bounds.b},
+						 .rect	   = {0, 0, 0, 0},
+						 .index	   = -1,
+						 .advance  = spaceBox.advance * tabSize,
+						 .isBitmap = false},
+				i};
 	} else {
 		auto i = addGlyphToAtlas(c);
-		//if (i == -1) { THROW_RUNTIME_ERR(std::format("Glyph '{}' not found in any font in the fallback chain!", c)); }
-		if(i == -1) {
-			//dbLog(dbg::LOG_WARNING, "Glyph for codepoint ", c, " not found in any font in the fallback chain!");
-			return getGlyphBox(U'?');
-		}
+		if (i == -1) { return getGlyphBox(U'?'); }
 		atlasChanged = true;
-		return data->glyphBoxes[i].first;
+		return {data->glyphBoxes[i].first, i};
 	}
 }
 
@@ -418,14 +392,6 @@ FontFallbackChain::FontFallbackChain(const std::vector<std::string_view> &fonts)
 			continue;
 		}
 		dbLog(dbg::LOG_INFO, "Loaded font face from path: ", fontPath);
-
-		dbLog(dbg::LOG_DEBUG, "Font face ", fontPath, " has ", face->num_glyphs, " glyphs");
-		dbLog(dbg::LOG_DEBUG, "Font face ", fontPath, " has ", face->num_fixed_sizes, " fixed sizes");
-		for (int i = 0; i < face->num_fixed_sizes; i++) {
-			dbLog(dbg::LOG_DEBUG, "strike ", i, ": ", face->available_sizes[i].width, "x",
-				  face->available_sizes[i].height);
-		}
-
 		data->fontFaces.push_back(face);
 	}
 }
@@ -463,13 +429,14 @@ std::pair<fxed::GlyphBox, int> FontFallbackChain::getGlyphBox(uint32_t c, uint32
 				continue;
 			}
 
-			GlyphBox box{.index	  = (int)glyphIndex,
-						 .advance = face->glyph->advance.x / 64.0,
-						 .bounds  = {face->glyph->metrics.horiBearingX / 64.0, face->glyph->metrics.horiBearingY / 64.0,
-									 (face->glyph->metrics.horiBearingX + face->glyph->metrics.width) / 64.0,
-									 (face->glyph->metrics.horiBearingY - face->glyph->metrics.height) / 64.0},
-						 .rect	  = {0, 0, (int)face->glyph->bitmap.width, (int)face->glyph->bitmap.rows},
-						 .isBitmap = face->glyph->format == FT_GLYPH_FORMAT_BITMAP};
+			GlyphBox box{
+				.bounds	  = {face->glyph->metrics.horiBearingX / 64.0f, face->glyph->metrics.horiBearingY / 64.0f,
+							 (face->glyph->metrics.horiBearingX + face->glyph->metrics.width) / 64.0f,
+							 (face->glyph->metrics.horiBearingY - face->glyph->metrics.height) / 64.0f},
+				.rect	  = {0, 0, (int)face->glyph->bitmap.width, (int)face->glyph->bitmap.rows},
+				.index	  = (int)glyphIndex,
+				.advance  = face->glyph->advance.x / 64.0f,
+				.isBitmap = face->glyph->format == FT_GLYPH_FORMAT_BITMAP};
 
 			return {box, i};
 		}

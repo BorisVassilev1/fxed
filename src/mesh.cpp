@@ -11,8 +11,7 @@ Mesh::Mesh(nri::NRI &nri, nri::CommandQueue &q, std::span<float> vertices, std::
 	init(nri, q, vertices, texCoords, indices);
 }
 
-Mesh::Mesh(nri::NRI &nri, std::size_t vertexCount, std::size_t indexCount,
-		   nri::MemoryTypeRequest memoryTypeRequest)
+Mesh::Mesh(nri::NRI &nri, std::size_t vertexCount, std::size_t indexCount, nri::MemoryTypeRequest memoryTypeRequest)
 	: vertexCount(vertexCount), indexCount(indexCount) {
 	initBuffers(nri, vertexCount, indexCount, memoryTypeRequest);
 }
@@ -120,8 +119,8 @@ QuadMesh::QuadMesh(nri::NRI &nri, nri::CommandQueue &q, glm::vec2 size) {
 	std::vector<float> vertices = {
 		-size.x / 2, size.y / 2,	  // Vertex 1 Position
 		-size.x / 2, -size.y / 2,	  // Vertex 2 Position
-		size.x / 2,  -size.y / 2,	  // Vertex 3 Position
-		size.x / 2,  size.y / 2,	  // Vertex 4 Position
+		size.x / 2,	 -size.y / 2,	  // Vertex 3 Position
+		size.x / 2,	 size.y / 2,	  // Vertex 4 Position
 	};
 
 	std::vector<float> texCoords = {

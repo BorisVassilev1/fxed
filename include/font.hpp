@@ -34,14 +34,21 @@ class FontAtlas {
 
 	FontData *data;
 
+	std::unique_ptr<nri::Allocation> gpuAllocation;
 	std::unique_ptr<nri::Image2D>	 image;
-	std::unique_ptr<nri::Allocation> imageAllocation;
-	std::unique_ptr<nri::ImageView>	 imageView;
-	FontFallbackChain				 fallbackChain;
-	nri::NRI						&nri;
-	nri::CommandQueue				&q;
-	uint32_t						 fontSize	  = 48;
-	bool							 atlasChanged = false;
+	std::unique_ptr<nri::Buffer>	 glyphGeometryBuffer;
+
+	std::unique_ptr<nri::Allocation> uploadAllocation;
+	std::unique_ptr<nri::Buffer>	 uploadBuffer;
+
+	std::unique_ptr<nri::ImageView> imageView;
+
+	FontFallbackChain  fallbackChain;
+	nri::NRI		  &nri;
+	nri::CommandQueue &q;
+	uint32_t		   fontSize		 = 48;
+	bool			   atlasChanged	 = false;
+	uint32_t		   maxGlyphCount = 0;
 
 	int	 addGlyphToAtlas(uint32_t c);
 	void uploadAtlasToGPU();
@@ -50,8 +57,11 @@ class FontAtlas {
 	DELETE_COPY_AND_ASSIGNMENT(FontAtlas);
 	FontAtlas(FontAtlas &&other)
 		: data(other.data),
+		  gpuAllocation(std::move(other.gpuAllocation)),
 		  image(std::move(other.image)),
-		  imageAllocation(std::move(other.imageAllocation)),
+		  glyphGeometryBuffer(std::move(other.glyphGeometryBuffer)),
+		  uploadAllocation(std::move(other.uploadAllocation)),
+		  uploadBuffer(std::move(other.uploadBuffer)),
 		  imageView(std::move(other.imageView)),
 		  fallbackChain(std::move(other.fallbackChain)),
 		  nri(other.nri),
@@ -60,7 +70,7 @@ class FontAtlas {
 		other.data = nullptr;
 	}
 	FontAtlas(nri::NRI &nri, nri::CommandQueue &q, FontFallbackChain &&fallbackChain, uint32_t atlasSize,
-			  uint32_t fontSize = 48);
+			  uint32_t fontSize = 48, uint32_t maxGlyphCount = 1000);
 	~FontAtlas();
 
 	void	 resize(uint32_t newSize);
@@ -68,8 +78,9 @@ class FontAtlas {
 	uint32_t getFontSize() const { return fontSize; }
 
 	auto getHandle() { return imageView->getHandle(); }
+	auto getGlyphGeometryBufferHandle() { return glyphGeometryBuffer->getHandle(); }
 
-	GlyphBox getGlyphBox(uint32_t c);
+	std::pair<GlyphBox, int> getGlyphBox(uint32_t c);
 	int		 getAtlasSize() const { return image->getWidth(); }
 
 	static std::string getDefaultSystemFontPath();

@@ -1177,77 +1177,111 @@ std::pair<std::vector<vkraii::ShaderModule>, std::vector<vk::PipelineShaderStage
 		std::replace(filename.begin(), filename.end(), '.', '_');
 		std::string cacheFileName = std::format("{}_{}.spv", filename, stageInfo.entryPoint);
 #ifndef NDEBUG
-		CComPtr<IDxcBlob> sourceBlob;
-		std::wstring	  wSourceFile = std::wstring(stageInfo.sourceFile.begin(), stageInfo.sourceFile.end());
-		HRESULT			  hr		  = includeHandler->LoadSource(wSourceFile.c_str(), &sourceBlob);
-
-		if (FAILED(hr)) {
-			dbLog(dbg::LOG_ERROR, "Failed to load shader source file: ", stageInfo.sourceFile);
-			THROW_RUNTIME_ERR(std::format("Failed to load shader source file: {}", stageInfo.sourceFile));
+		std::filesystem::path	   cachePath = std::filesystem::path("shadercache") / cacheFileName;
+		vk::ShaderModuleCreateInfo shaderModuleInfo;
+		CComPtr<IDxcBlob>		   spirvBlob;
+		std::unique_ptr<char[]>	   spirvData;
+		// check timestamps of source and cache files
+		bool cacheValid = false;
+		if (std::filesystem::exists(cachePath)) {
+			auto sourceTime = std::filesystem::last_write_time(sourceFile);
+			auto cacheTime	= std::filesystem::last_write_time(cachePath);
+			cacheValid		= cacheTime >= sourceTime;
 		}
 
-		std::vector<LPCWSTR> arguments;
-		arguments.push_back(L"-E");
-		std::wstring entryPoint = std::wstring(stageInfo.entryPoint.begin(), stageInfo.entryPoint.end());
-		arguments.push_back(entryPoint.c_str());
-		arguments.push_back(L"-T");
-		switch (stageInfo.shaderType) {
-			case ShaderType::SHADER_TYPE_VERTEX: arguments.push_back(L"vs_6_6"); break;
-			case ShaderType::SHADER_TYPE_FRAGMENT: arguments.push_back(L"ps_6_6"); break;
-			case ShaderType::SHADER_TYPE_COMPUTE: arguments.push_back(L"cs_6_6"); break;
-			case ShaderType::SHADER_TYPE_RAYGEN: arguments.push_back(L"lib_6_6"); break;
-			case ShaderType::SHADER_TYPE_CLOSEST_HIT: arguments.push_back(L"lib_6_6"); break;
-			case ShaderType::SHADER_TYPE_ANY_HIT: arguments.push_back(L"lib_6_6"); break;
-			case ShaderType::SHADER_TYPE_MISS: arguments.push_back(L"lib_6_6"); break;
-			default:
-				dbLog(dbg::LOG_ERROR, "Unsupported shader type: ", static_cast<int>(stageInfo.shaderType));
-				throw std::runtime_error("Unsupported shader stage!");
+		if (!cacheValid) {
+			CComPtr<IDxcBlob> sourceBlob;
+			std::wstring	  wSourceFile = std::wstring(stageInfo.sourceFile.begin(), stageInfo.sourceFile.end());
+			HRESULT			  hr		  = includeHandler->LoadSource(wSourceFile.c_str(), &sourceBlob);
+
+			if (FAILED(hr)) {
+				dbLog(dbg::LOG_ERROR, "Failed to load shader source file: ", stageInfo.sourceFile);
+				THROW_RUNTIME_ERR(std::format("Failed to load shader source file: {}", stageInfo.sourceFile));
+			}
+
+			std::vector<LPCWSTR> arguments;
+			arguments.push_back(L"-E");
+			std::wstring entryPoint = std::wstring(stageInfo.entryPoint.begin(), stageInfo.entryPoint.end());
+			arguments.push_back(entryPoint.c_str());
+			arguments.push_back(L"-T");
+			switch (stageInfo.shaderType) {
+				case ShaderType::SHADER_TYPE_VERTEX: arguments.push_back(L"vs_6_6"); break;
+				case ShaderType::SHADER_TYPE_FRAGMENT: arguments.push_back(L"ps_6_6"); break;
+				case ShaderType::SHADER_TYPE_COMPUTE: arguments.push_back(L"cs_6_6"); break;
+				case ShaderType::SHADER_TYPE_RAYGEN: arguments.push_back(L"lib_6_6"); break;
+				case ShaderType::SHADER_TYPE_CLOSEST_HIT: arguments.push_back(L"lib_6_6"); break;
+				case ShaderType::SHADER_TYPE_ANY_HIT: arguments.push_back(L"lib_6_6"); break;
+				case ShaderType::SHADER_TYPE_MISS: arguments.push_back(L"lib_6_6"); break;
+				default:
+					dbLog(dbg::LOG_ERROR, "Unsupported shader type: ", static_cast<int>(stageInfo.shaderType));
+					throw std::runtime_error("Unsupported shader stage!");
+			}
+			arguments.push_back(L"-spirv");
+			arguments.push_back(L"-D");
+			arguments.push_back(L"VULKAN");
+			arguments.push_back(L"-D");
+			arguments.push_back(L"SHADER");
+			arguments.push_back(L"-I");
+			arguments.push_back(L"./shaders/");
+			arguments.push_back(L"-fvk-use-dx-layout");
+			arguments.push_back(L"-fspv-target-env=vulkan1.2");
+			arguments.push_back(L"-HV");
+			arguments.push_back(L"2021");
+
+			DxcBuffer buffer{};
+			buffer.Ptr		= sourceBlob->GetBufferPointer();
+			buffer.Size		= sourceBlob->GetBufferSize();
+			buffer.Encoding = 0;
+
+			dbLog(dbg::LOG_DEBUG, "\n\tCompiling shader: ", stageInfo.sourceFile,
+				  "\n\tEntry point: ", stageInfo.entryPoint);
+
+			includeHandler->reset();
+			CComPtr<IDxcResult> result;
+			hr = compiler->Compile(&buffer, arguments.data(), static_cast<UINT32>(arguments.size()),
+								   includeHandler.get(), IID_PPV_ARGS(&result));
+			if (FAILED(hr)) {
+				throw std::runtime_error(std::format("Failed to compile shader: {}", stageInfo.sourceFile));
+			}
+
+			CComPtr<IDxcBlobEncoding> errorBuffer;
+			result->GetErrorBuffer(&errorBuffer);
+			if (errorBuffer != nullptr && errorBuffer->GetBufferSize() > 0) {
+				std::string errorMessage(reinterpret_cast<const char *>(errorBuffer->GetBufferPointer()),
+										 errorBuffer->GetBufferSize());
+				std::cerr << "Shader compilation warnings/errors: " << errorMessage << std::endl;
+			}
+
+			result->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&spirvBlob), nullptr);
+
+			// write to shader cache
+			std::filesystem::create_directories(cachePath.parent_path());
+			std::ofstream ofs(cachePath, std::ios::binary);
+			ofs.write(reinterpret_cast<const char *>(spirvBlob->GetBufferPointer()), spirvBlob->GetBufferSize());
+			ofs.close();
+			shaderModuleInfo = {
+				{}, spirvBlob->GetBufferSize(), reinterpret_cast<const uint32_t *>(spirvBlob->GetBufferPointer())};
+		} else {
+			// load from cache
+			std::ifstream ifs(cachePath, std::ios::binary | std::ios::ate);
+			if (!ifs) {
+				dbLog(dbg::LOG_ERROR, "Failed to open shader cache file: ", cachePath);
+				THROW_RUNTIME_ERR(std::format("Failed to open shader cache file: {}", cachePath.string()));
+			}
+			std::streamsize size = ifs.tellg();
+			ifs.seekg(0, std::ios::beg);
+			spirvBlob = nullptr;
+			spirvData = std::make_unique<char[]>(size);
+			ifs.read(reinterpret_cast<char *>(spirvData.get()), size);
+			if (!ifs) {
+				dbLog(dbg::LOG_ERROR, "Failed to read shader cache file: ", cachePath);
+				THROW_RUNTIME_ERR(std::format("Failed to read shader cache file: {}", cachePath.string()));
+			}
+			ifs.close();
+			shaderModuleInfo = {
+				{}, static_cast<size_t>(size), reinterpret_cast<const uint32_t *>(spirvData.get())};
+			dbLog(dbg::LOG_DEBUG, "Loaded shader from cache: ", cachePath);
 		}
-		arguments.push_back(L"-spirv");
-		arguments.push_back(L"-D");
-		arguments.push_back(L"VULKAN");
-		arguments.push_back(L"-D");
-		arguments.push_back(L"SHADER");
-		arguments.push_back(L"-I");
-		arguments.push_back(L"./shaders/");
-		arguments.push_back(L"-fvk-use-dx-layout");
-		arguments.push_back(L"-fspv-target-env=vulkan1.2");
-		arguments.push_back(L"-HV");
-		arguments.push_back(L"2021");
-
-		DxcBuffer buffer{};
-		buffer.Ptr		= sourceBlob->GetBufferPointer();
-		buffer.Size		= sourceBlob->GetBufferSize();
-		buffer.Encoding = 0;
-
-		dbLog(dbg::LOG_DEBUG, "\n\tCompiling shader: ", stageInfo.sourceFile,
-			  "\n\tEntry point: ", stageInfo.entryPoint);
-
-		includeHandler->reset();
-		CComPtr<IDxcResult> result;
-		hr = compiler->Compile(&buffer, arguments.data(), static_cast<UINT32>(arguments.size()), includeHandler.get(),
-							   IID_PPV_ARGS(&result));
-		if (FAILED(hr)) { throw std::runtime_error(std::format("Failed to compile shader: {}", stageInfo.sourceFile)); }
-
-		CComPtr<IDxcBlobEncoding> errorBuffer;
-		result->GetErrorBuffer(&errorBuffer);
-		if (errorBuffer != nullptr && errorBuffer->GetBufferSize() > 0) {
-			std::string errorMessage(reinterpret_cast<const char *>(errorBuffer->GetBufferPointer()),
-									 errorBuffer->GetBufferSize());
-			std::cerr << "Shader compilation warnings/errors: " << errorMessage << std::endl;
-		}
-
-		CComPtr<IDxcBlob> spirvBlob;
-		result->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&spirvBlob), nullptr);
-
-		// write to shader cache
-		std::filesystem::path cachePath = std::filesystem::path("shadercache") / cacheFileName;
-		std::filesystem::create_directories(cachePath.parent_path());
-		std::ofstream ofs(cachePath, std::ios::binary);
-		ofs.write(reinterpret_cast<const char *>(spirvBlob->GetBufferPointer()), spirvBlob->GetBufferSize());
-		ofs.close();
-		vk::ShaderModuleCreateInfo shaderModuleInfo({}, spirvBlob->GetBufferSize(),
-													reinterpret_cast<const uint32_t *>(spirvBlob->GetBufferPointer()));
 #else	  // NDEBUG
 		auto it = g_shaders.find(cacheFileName);
 		if (it == g_shaders.end()) {

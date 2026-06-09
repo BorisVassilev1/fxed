@@ -60,7 +60,7 @@ class TextPane : public Pane {
 	uint32_t		textRendererVersion;
 	TextRenderState renderState;
 	glm::ivec2		cursorPos;
-	TextMesh		textMesh;
+	TextMeshInstanced		textMesh;
 	std::u32string	text;
 	float			scrollSpeed = 2.f;
 

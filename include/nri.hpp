@@ -348,6 +348,12 @@ class Allocation {
 	virtual void  unmap() = 0;
 };
 
+template <typename T>
+concept RequiresMemory = requires(T t) {
+	t.getMemoryRequirements();
+	t.bindMemory(std::declval<Allocation &>(), std::declval<std::size_t>());
+};
+
 class Buffer {
    protected:
 	ResourceHandle		   handle				= ResourceHandle::INVALID_HANDLE;
@@ -372,6 +378,7 @@ class Buffer {
 
 	ResourceHandle getHandle();
 };
+static_assert(RequiresMemory<Buffer>, "Buffer must implement getMemoryRequirements and bindMemory");
 
 class ImageView {
    protected:
@@ -409,6 +416,7 @@ class Image2D {
 	virtual std::unique_ptr<ImageView> createTextureView()		= 0;
 	virtual std::unique_ptr<ImageView> createStorageView()		= 0;
 };
+static_assert(RequiresMemory<Image2D>, "Image2D must implement getMemoryRequirements and bindMemory");
 
 class CommandPool {
    public:

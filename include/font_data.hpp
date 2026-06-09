@@ -7,12 +7,12 @@ struct Rectangle {
 };
 
 struct GlyphBox {
-	int	   index;
-	double advance;
 	struct {
-		double l, b, r, t;
+		float l, b, r, t;
 	} bounds;
 	Rectangle rect;
+	int	   index;
+	float advance;
 	bool isBitmap;
 };
 
