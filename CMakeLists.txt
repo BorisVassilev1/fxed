@@ -91,16 +91,11 @@ add_subdirectory(lib/freetype EXCLUDE_FROM_ALL)
 
 ## Create the Freetype::Freetype alias that msdfgen expects
 if(NOT TARGET Freetype::Freetype)
-    add_library(Freetype::Freetype STATIC IMPORTED GLOBAL)
-    set_target_properties(Freetype::Freetype PROPERTIES
-        IMPORTED_LOCATION             "${CMAKE_CURRENT_BINARY_DIR}/lib/freetype/libfreetype.a"
-        INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/lib/freetype/include"
-    )
-    add_dependencies(Freetype::Freetype freetype)
+    add_library(Freetype::Freetype ALIAS freetype)
 endif()
 
 set(FREETYPE_FOUND TRUE)
-set(FREETYPE_LIBRARY "${CMAKE_CURRENT_BINARY_DIR}/lib/freetype/libfreetype.a")
+set(FREETYPE_LIBRARY freetype)
 set(FREETYPE_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/lib/freetype/include")
 set(CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH ON)
 set(CMAKE_FIND_USE_CMAKE_SYSTEM_PATH ON)
@@ -137,5 +132,3 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
 	DBG_LOG_LEVEL=-1
 )
 #target_link_options(${PROJECT_NAME} PRIVATE -Wl,--verbose)
-
-
