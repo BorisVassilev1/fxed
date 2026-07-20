@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <span>
 #include "any_range.hpp"
 #include "font.hpp"
 #include "mesh.hpp"
@@ -58,7 +59,8 @@ class TextMeshInstanced {
 	void draw(nri::CommandBuffer &cmdBuffer, nri::GraphicsProgram &program) const;
 
 	template <std::ranges::input_range R>
-	glm::vec2 updateText(R &&text, fxed::FontAtlas &font, glm::ivec2 cursorPos = {0, 0}, float lineWidth = 0);
+	glm::vec2 updateText(R &&text, fxed::FontAtlas &font, glm::ivec2 cursorPos = {0, 0}, float lineWidth = 0,
+						  std::span<const glm::vec4> colors = {});
 
 	static std::vector<nri::VertexBinding> getVertexBindings();
 };
@@ -196,7 +198,10 @@ glm::vec2 TextMesh::updateText(R &&text, fxed::FontAtlas &font, glm::ivec2 curso
 }
 
 template <std::ranges::input_range R>
-glm::vec2 TextMeshInstanced::updateText(R &&text, fxed::FontAtlas &font, glm::ivec2 cursorPos, float lineWidth) {
+glm::vec2 TextMeshInstanced::updateText(R &&text, fxed::FontAtlas &font, glm::ivec2 cursorPos, float lineWidth,
+										 std::span<const glm::vec4> colors) {
+	static constexpr glm::vec4 defaultColor{0.804f, 0.839f, 0.956f, 1.0f};
+
 	bounds					  = glm::vec2(0, 0);
 	glm::vec2 cursorPosResult = cursorPos;
 	size_t	  offset		  = 0;
@@ -208,9 +213,10 @@ glm::vec2 TextMeshInstanced::updateText(R &&text, fxed::FontAtlas &font, glm::iv
 	double	  lineHeight	  = 1.2;
 	overflowed				  = false;
 
-	size_t j = 0;
+	size_t j	   = 0;
+	size_t charPos = 0;
 	instanceData.clear();
-	for (auto i = text.begin(); i != text.end(); ++i) {
+	for (auto i = text.begin(); i != text.end(); ++i, ++charPos) {
 		if (j >= instanceData.capacity()) {
 			dbLog(dbg::LOG_WARNING, "TextMesh max character count exceeded, truncating text");
 			break;
@@ -254,12 +260,9 @@ glm::vec2 TextMeshInstanced::updateText(R &&text, fxed::FontAtlas &font, glm::iv
 			if (font.getFontSize() >= 32) { drawMode = CharacterDrawMode::MSDF; }
 
 			if (box.isBitmap) { drawMode = CharacterDrawMode::COLOR; }
-			float p = advanceDX + advanceDY;
+			glm::vec4 color = charPos < colors.size() ? colors[charPos] : defaultColor;
 			instanceData.push_back(InstanceData{
-				//.color = glm::vec4(rand() / (float)RAND_MAX, rand() / (float)RAND_MAX, rand() /
-				//(float)RAND_MAX, 1.0f),
-				.color = glm::vec4(std::sin(p * 0.1f) * 0.5f + 0.5f, std::sin(p * 0.1f + 2) * 0.5f + 0.5f,
-								   std::sin(p * 0.1f + 4) * 0.5f + 0.5f, 1.0f),
+				.color		 = color,
 				.translation = glm::vec2(advanceDX, advanceDY),
 				.charIndex	 = index,
 				.drawMode	 = static_cast<int32_t>(drawMode),

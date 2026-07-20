@@ -4,6 +4,7 @@
 #include "mesh.hpp"
 #include "nri.hpp"
 #include "resource_manager.hpp"
+#include "syntax_highlight.hpp"
 #include "text_editor.hpp"
 #include "text_rendering.hpp"
 #include "utf8_convert.hpp"
@@ -79,13 +80,16 @@ class TextPane : public Pane {
 
 class TextEditorPane : public TextPane {
    protected:
-	DefaultTextEditor editor;
+	DefaultTextEditor		editor;
+	CppHighlighter			highlighter;
+	std::vector<glm::vec4> highlightColors;
 
    public:
 	TextEditorPane(nri::NRI &nri, nri::CommandQueue &queue, uint32_t width, uint32_t height, TextRenderer &textRenderer,
 				   DefaultTextEditor &&editor = DefaultTextEditor());
 
 	void render(nri::CommandBuffer &cmdBuf) override;
+	void resize(uint32_t newWidth, uint32_t newHeight) override;
 
 	DefaultTextEditor &getEditor() { return editor; }
 

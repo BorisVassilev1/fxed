@@ -61,6 +61,18 @@ add_subdirectory(lib/glfw EXCLUDE_FROM_ALL)
 add_subdirectory(lib/glm EXCLUDE_FROM_ALL)
 add_subdirectory(lib/vk-bootstrap EXCLUDE_FROM_ALL)
 
+# tree-sitter runtime, built directly from source rather than via its own CMakeLists.txt
+# (which tries to invoke the tree-sitter CLI to regenerate cpp's parser.c)
+add_library(tree-sitter STATIC lib/tree-sitter/lib/src/lib.c)
+target_include_directories(tree-sitter PRIVATE lib/tree-sitter/lib/src lib/tree-sitter/lib/src/wasm
+										PUBLIC lib/tree-sitter/lib/include)
+target_compile_definitions(tree-sitter PRIVATE _POSIX_C_SOURCE=200112L _DEFAULT_SOURCE _BSD_SOURCE _DARWIN_C_SOURCE)
+set_target_properties(tree-sitter PROPERTIES C_STANDARD 11 POSITION_INDEPENDENT_CODE ON)
+
+add_library(tree-sitter-cpp STATIC lib/tree-sitter-cpp/src/parser.c lib/tree-sitter-cpp/src/scanner.c)
+target_include_directories(tree-sitter-cpp PRIVATE lib/tree-sitter-cpp/src)
+set_target_properties(tree-sitter-cpp PROPERTIES C_STANDARD 11 POSITION_INDEPENDENT_CODE ON)
+
 set(CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH OFF)
 set(CMAKE_FIND_USE_CMAKE_SYSTEM_PATH OFF)
 
@@ -126,6 +138,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE glfw)
 target_link_libraries(${PROJECT_NAME} PRIVATE glm)
 target_link_libraries(${PROJECT_NAME} PRIVATE Freetype::Freetype)
 target_link_libraries(${PROJECT_NAME} PRIVATE png_static)
+target_link_libraries(${PROJECT_NAME} PRIVATE tree-sitter tree-sitter-cpp)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
 	RUNTIME_OUTPUT_DIRECTORY ../

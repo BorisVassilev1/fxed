@@ -168,11 +168,14 @@ void fxed::TextEditorPane::render(nri::CommandBuffer &cmdBuf) {
 	textRenderer.getFont().syncWithGPU();
 	// TODO: this is hacky
 	if (editor.hasTextChanged() || editor.hasCursorMoved() || textRenderer.getVersion() != textRendererVersion) {
-		auto &&text	  = editor.getTextRange();
+		if (editor.hasTextChanged() || textRenderer.getVersion() != textRendererVersion) {
+			this->text.clear();
+			std::ranges::copy(editor.getTextRange(), std::back_inserter(this->text));
+			highlightColors = highlighter.highlight(this->text);
+		}
 		cursorPos	  = editor.getCursorPos();
-		cursorRealPos = textMesh.updateText(text, textRenderer.getFont(), cursorPos, wordWrap ? getWidth() : 0);
-		this->text.clear();
-		std::ranges::copy(text, std::back_inserter(this->text));
+		cursorRealPos = textMesh.updateText(this->text, textRenderer.getFont(), cursorPos,
+											 wordWrap ? getWidth() : 0, highlightColors);
 		editor.resetTextChanged();
 		textRendererVersion = textRenderer.getVersion();
 	}
@@ -194,6 +197,17 @@ void fxed::TextEditorPane::render(nri::CommandBuffer &cmdBuf) {
 	TextPane::render(cmdBuf);
 
 	editor.resetCursorMoved();
+}
+
+void fxed::TextEditorPane::resize(uint32_t newWidth, uint32_t newHeight) {
+	if (newWidth == (uint32_t)size.x && newHeight == (uint32_t)size.y) return;
+	Pane::resize(newWidth, newHeight);
+	renderState.viewportSize = {newWidth, newHeight};
+	// re-wrap using the cached syntax-highlight colors, rather than TextPane::resize's colorless updateText
+	if (wordWrap) {
+		renderState.cursorPos =
+			textMesh.updateText(text, textRenderer.getFont(), cursorPos, getWidth(), highlightColors);
+	}
 }
 
 void fxed::TextEditorPane::charInput(unsigned int codepoint) {
