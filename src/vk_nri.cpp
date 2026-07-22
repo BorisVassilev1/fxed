@@ -257,12 +257,19 @@ void VulkanNRI::pickPhysicalDevice() {
 		res = physicalDevice.enable_extension_if_present(ext);
 		if (!res) { THROW_RUNTIME_ERR(std::format("Required device extension {} is not supported", ext)); }
 	}
-	res = physicalDevice.enable_extension_features_if_present(vk::PhysicalDeviceVulkan12Features()
-																  .setBufferDeviceAddress(true)
-																  .setShaderSampledImageArrayNonUniformIndexing(true)
-																  .setShaderStorageBufferArrayNonUniformIndexing(true)
-																  .setShaderStorageImageArrayNonUniformIndexing(true)
-																  .setRuntimeDescriptorArray(true));
+	res =
+		physicalDevice.enable_extension_features_if_present(vk::PhysicalDeviceVulkan12Features()
+																.setBufferDeviceAddress(true)
+																.setDescriptorBindingStorageBufferUpdateAfterBind(true)
+																.setDescriptorBindingUniformBufferUpdateAfterBind(true)
+																.setDescriptorBindingSampledImageUpdateAfterBind(true)
+																.setDescriptorBindingStorageImageUpdateAfterBind(true)
+																.setShaderSampledImageArrayNonUniformIndexing(true)
+																.setShaderStorageBufferArrayNonUniformIndexing(true)
+																.setShaderStorageImageArrayNonUniformIndexing(true)
+																.setDescriptorBindingPartiallyBound(true)
+																//.setDescriptorBindingVariableDescriptorCount(true)
+																.setRuntimeDescriptorArray(true));
 	if (!res) { THROW_RUNTIME_ERR("Failed to enable required Vulkan 1.2 features"); }
 	res = physicalDevice.enable_extension_features_if_present(
 		vk::PhysicalDeviceDynamicRenderingFeatures().setDynamicRendering(true));
@@ -357,8 +364,9 @@ VulkanDescriptorAllocator::VulkanDescriptorAllocator(VulkanNRI &nri)
 	for (const auto &poolSize : poolSizes) {
 		totalDescriptors += poolSize.descriptorCount;
 	}
-	vk::DescriptorPoolCreateInfo poolInfo(vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet, totalDescriptors,
-										  poolSizes.size(), poolSizes.data());
+	vk::DescriptorPoolCreateInfo poolInfo(
+		vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet | vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind,
+		totalDescriptors, poolSizes.size(), poolSizes.data());
 
 	vk::DescriptorPool descriptorPool;
 	vkCreateDescriptorPool(&*nri.getDevice(), &*poolInfo, nullptr, (VkDescriptorPool *)&descriptorPool);
@@ -375,9 +383,12 @@ VulkanDescriptorAllocator::VulkanDescriptorAllocator(VulkanNRI &nri)
 									   vk::ShaderStageFlagBits::eAll, nullptr),
 	};
 
-	vk::DescriptorSetLayoutCreateInfo layoutInfo({}, samplerBindings.size(), samplerBindings.data());
+	vk::DescriptorSetLayoutCreateInfo layoutInfo(vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool,
+												 samplerBindings.size(), samplerBindings.data());
 
-	const vk::DescriptorBindingFlags bindingFlags = {};
+	const vk::DescriptorBindingFlags bindingFlags = vk::DescriptorBindingFlagBits::ePartiallyBound |
+													// vk::DescriptorBindingFlagBits::eVariableDescriptorCount |
+													vk::DescriptorBindingFlagBits::eUpdateAfterBind;
 
 	const vk::DescriptorBindingFlags bindingFlagsArr[] = {bindingFlags, bindingFlags, bindingFlags, bindingFlags,
 														  bindingFlags};
@@ -502,7 +513,8 @@ void VulkanAllocation::unmap() {
 }
 
 ResourceHandle VulkanBuffer::createHandle() const {
-	if (usage & BufferUsage::BUFFER_USAGE_UNIFORM) return nri->getDescriptorAllocator().addUniformBufferDescriptor(*this);
+	if (usage & BufferUsage::BUFFER_USAGE_UNIFORM)
+		return nri->getDescriptorAllocator().addUniformBufferDescriptor(*this);
 	return nri->getDescriptorAllocator().addStorageBufferDescriptor(*this);
 }
 
@@ -961,8 +973,8 @@ void VulkanWindow::createSwapChain(uint32_t &width, uint32_t &height) {
 	if (this->surface == nullptr) { THROW_RUNTIME_ERR("surface is not set for VulkanWindow!"); }
 
 	vk::SurfaceCapabilitiesKHR capabilities;
-	VkResult				   res = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(nri.getPhysicalDevice(), *surface,
-																			   (VkSurfaceCapabilitiesKHR *)&capabilities);
+	VkResult res = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(nri.getPhysicalDevice(), *surface,
+															 (VkSurfaceCapabilitiesKHR *)&capabilities);
 	if (res != VK_SUCCESS) {
 		if (swapChain) vkb::destroy_swapchain(swapChain);
 		swapChain = vkb::Swapchain();
@@ -1279,8 +1291,7 @@ std::pair<std::vector<vkraii::ShaderModule>, std::vector<vk::PipelineShaderStage
 				THROW_RUNTIME_ERR(std::format("Failed to read shader cache file: {}", cachePath.string()));
 			}
 			ifs.close();
-			shaderModuleInfo = {
-				{}, static_cast<size_t>(size), reinterpret_cast<const uint32_t *>(spirvData.get())};
+			shaderModuleInfo = {{}, static_cast<size_t>(size), reinterpret_cast<const uint32_t *>(spirvData.get())};
 			dbLog(dbg::LOG_DEBUG, "Loaded shader from cache: ", cachePath);
 		}
 #else	  // NDEBUG
