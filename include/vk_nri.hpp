@@ -94,6 +94,7 @@ class VulkanBuffer : public Buffer {
 
 	std::size_t offset = 0;
 	std::size_t size   = 0;
+	BufferUsage usage  = BufferUsage::BUFFER_USAGE_STORAGE;
 
 	ResourceHandle createHandle() const override;
 

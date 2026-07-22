@@ -501,11 +501,12 @@ void VulkanAllocation::unmap() {
 }
 
 ResourceHandle VulkanBuffer::createHandle() const {
+	if (usage & BufferUsage::BUFFER_USAGE_UNIFORM) return nri->getDescriptorAllocator().addUniformBufferDescriptor(*this);
 	return nri->getDescriptorAllocator().addStorageBufferDescriptor(*this);
 }
 
 VulkanBuffer::VulkanBuffer(VulkanNRI &nri, std::size_t size, BufferUsage usage)
-	: nri(&nri), buffer(nullptr), allocation(nullptr), offset(0), size(size) {
+	: nri(&nri), buffer(nullptr), allocation(nullptr), offset(0), size(size), usage(usage) {
 	vk::BufferUsageFlags bufferUsageFlags;
 	if (usage & BufferUsage::BUFFER_USAGE_VERTEX)
 		bufferUsageFlags |= vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eShaderDeviceAddress;

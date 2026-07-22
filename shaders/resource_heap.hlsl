@@ -271,6 +271,24 @@ class ArrayBufferHandle {
 	}
 };
 
+class UniformBufferHandle {
+	ResourceHandle handle;
+
+	bool IsValid() { return handle.IsValid(); }
+
+	template<typename T>
+	T Load();
+};
+
+#define DECLARE_UNIFORM_BUFFER_TYPE(StructType) \
+	VK_BINDING_ATTR(2, 0) \
+	ConstantBuffer<StructType> CONCAT(g_UniformBuffer_, StructType) [ BINDLESS_RESCRIPTOR_HEAP_SIZE ] : register(b2); \
+	template<> \
+	StructType UniformBufferHandle::Load<StructType>() { \
+		uint index = handle.GetIndex(); \
+		return CONCAT(g_UniformBuffer_, StructType) [ NonUniformResourceIndex(index) ]; \
+	}
+
 RaytracingAccelerationStructure g_AccelerationStructures [ 50 ] : register(t4);
 
 class AccelerationStructureHandle {
