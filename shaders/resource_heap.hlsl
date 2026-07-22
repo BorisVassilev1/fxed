@@ -14,8 +14,6 @@ class ResourceHandle {
 	bool IsValid() { return index != 0xFFFFFFFF; }
 };
 
-#define BINDLESS_RESCRIPTOR_HEAP_SIZE 16
-
 #define ITERATE_TEXTURE_TYPES(ITERATOR, ...) \
 	ITERATOR(int, __VA_ARGS__) \
 	ITERATOR(uint, __VA_ARGS__) \
@@ -46,7 +44,7 @@ class ResourceHandle {
 
 #define _GENERATE_TEXTURE_TYPE_SLOT(nativeType, textureType, bindingA, bindingB) \
 	VK_BINDING_ATTR(bindingA, bindingB) \
-	textureType<nativeType> g_##textureType##nativeType [ BINDLESS_RESCRIPTOR_HEAP_SIZE ] : register(t##bindingA);
+	textureType<nativeType> g_##textureType##nativeType [] : register(t##bindingA);
 
 #define DEFINE_TEXTURE_TYPES_AND_FORMATS_SLOTS(textureType, bindingA, bindingB) \
 	ITERATE_TEXTURE_TYPES(_GENERATE_TEXTURE_TYPE_SLOT, textureType, bindingA, bindingB)
@@ -58,7 +56,7 @@ class ResourceHandle {
 #define CONCAT(a, b) CONCAT2(a, b)
 #define STRINGIFY(a) #a
 
-SamplerState g_Samplers [ BINDLESS_RESCRIPTOR_HEAP_SIZE ] : register(s0);
+SamplerState g_Samplers [] : register(s0);
 DEFINE_TEXTURE_TYPES_AND_FORMATS_SLOTS(Texture1D, 0, 0)
 DEFINE_TEXTURE_TYPES_AND_FORMATS_SLOTS(Texture2D, 0, 0)
 DEFINE_TEXTURE_TYPES_AND_FORMATS_SLOTS(Texture3D, 0, 0)
@@ -174,7 +172,7 @@ ITERATE_TEXTURE_TYPES(DEFINE_3D_LOAD_OVERLOADS, Texture3D)
 
 #define _GENERATE_RWTEXTURE_TYPE_SLOT(nativeType, textureType, bindingA, bindingB) \
 	VK_BINDING_ATTR(bindingA, bindingB) \
-	textureType<nativeType> g_##textureType##nativeType [ BINDLESS_RESCRIPTOR_HEAP_SIZE ] : register(u##bindingA);
+	textureType<nativeType> g_##textureType##nativeType [] : register(u##bindingA);
 
 #define DEFINE_RWTEXTURE_TYPES_AND_FORMATS_SLOTS(textureType, bindingA, bindingB) \
 	ITERATE_TEXTURE_TYPES(_GENERATE_RWTEXTURE_TYPE_SLOT, textureType, bindingA, bindingB)
@@ -257,7 +255,7 @@ ITERATE_TEXTURE_TYPES(DEFINE_3D_RWLOAD_OVERLOADS, RWTexture3D)
 #undef DEFINE_TEXTURE_TYPES_AND_FORMATS_SLOTS
 #undef ITERATE_TEXTURE_TYPES
 
-ByteAddressBuffer g_StorageBuffer    [ BINDLESS_RESCRIPTOR_HEAP_SIZE ] : register(t3);
+ByteAddressBuffer g_StorageBuffer    [] : register(t3);
 
 class ArrayBufferHandle {
 	ResourceHandle handle;
@@ -282,7 +280,7 @@ class UniformBufferHandle {
 
 #define DECLARE_UNIFORM_BUFFER_TYPE(StructType) \
 	VK_BINDING_ATTR(2, 0) \
-	ConstantBuffer<StructType> CONCAT(g_UniformBuffer_, StructType) [ BINDLESS_RESCRIPTOR_HEAP_SIZE ] : register(b2); \
+	ConstantBuffer<StructType> CONCAT(g_UniformBuffer_, StructType) [] : register(b2); \
 	template<> \
 	StructType UniformBufferHandle::Load<StructType>() { \
 		uint index = handle.GetIndex(); \

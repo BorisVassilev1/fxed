@@ -261,7 +261,8 @@ void VulkanNRI::pickPhysicalDevice() {
 																  .setBufferDeviceAddress(true)
 																  .setShaderSampledImageArrayNonUniformIndexing(true)
 																  .setShaderStorageBufferArrayNonUniformIndexing(true)
-																  .setShaderStorageImageArrayNonUniformIndexing(true));
+																  .setShaderStorageImageArrayNonUniformIndexing(true)
+																  .setRuntimeDescriptorArray(true));
 	if (!res) { THROW_RUNTIME_ERR("Failed to enable required Vulkan 1.2 features"); }
 	res = physicalDevice.enable_extension_features_if_present(
 		vk::PhysicalDeviceDynamicRenderingFeatures().setDynamicRendering(true));
@@ -1138,7 +1139,6 @@ vk::PrimitiveTopology nriPrimitiveType2vkTopology[] = {
 	vk::PrimitiveTopology::eLineStrip,	  vk::PrimitiveTopology::ePointList,
 };
 
-// TODO: merge with DX12 implementation
 std::pair<std::vector<vkraii::ShaderModule>, std::vector<vk::PipelineShaderStageCreateInfo>> VulkanProgramBuilder::
 	createShaderModules(std::vector<ShaderCreateInfo> &&stagesInfo, const vkb::Device &device) {
 	std::vector<vk::PipelineShaderStageCreateInfo> shaderStages;
