@@ -69,13 +69,14 @@ set(PNG_PNG_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lib/libpng CACHE PATH "" FOR
 set(PNG_LIBRARY png_static CACHE STRING "" FORCE)
 set(PNG_FOUND TRUE CACHE BOOL "" FORCE)
 
-if(WIN32)
-    set(_png_lib "${CMAKE_CURRENT_BINARY_DIR}/lib/libpng/libpng18_static.lib")
-    set(_png_lib_debug "${CMAKE_CURRENT_BINARY_DIR}/lib/libpng/libpng18_staticd.lib")
-else()
-    set(_png_lib "${CMAKE_CURRENT_BINARY_DIR}/lib/libpng/libpng18.a")
-    set(_png_lib_debug "${CMAKE_CURRENT_BINARY_DIR}/lib/libpng/libpng18d.a")
+get_target_property(_png_output_name png_static OUTPUT_NAME)
+get_target_property(_png_debug_postfix png_static DEBUG_POSTFIX)
+if(NOT _png_debug_postfix)
+    set(_png_debug_postfix "")
 endif()
+set(_png_lib "${CMAKE_CURRENT_BINARY_DIR}/lib/libpng/${CMAKE_STATIC_LIBRARY_PREFIX}${_png_output_name}${CMAKE_STATIC_LIBRARY_SUFFIX}")
+set(_png_lib_debug "${CMAKE_CURRENT_BINARY_DIR}/lib/libpng/${CMAKE_STATIC_LIBRARY_PREFIX}${_png_output_name}${_png_debug_postfix}${CMAKE_STATIC_LIBRARY_SUFFIX}")
+
 if(NOT TARGET PNG::PNG)
     add_library(PNG::PNG STATIC IMPORTED GLOBAL)
     set_target_properties(PNG::PNG PROPERTIES
