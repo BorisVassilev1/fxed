@@ -54,8 +54,8 @@ class VulkanDescriptorAllocator {
 
 	int currentStorageBufferDescriptorIndex = 0;
 	int currentUniformBufferDescriptorIndex = 0;
-	int currentStorageImageDescriptorIndex = 0;
-	int currentSamplerImageDescriptorIndex = 0;
+	int currentStorageImageDescriptorIndex	= 0;
+	int currentSamplerImageDescriptorIndex	= 0;
 
    public:
 	VulkanDescriptorAllocator(VulkanNRI &nri);
@@ -166,7 +166,9 @@ class VulkanImage2D : public Image2D {
 	VulkanNRI							*nri;
 	OwnerOrNot<vkraii::Image, vk::Image> image;
 	vkb::Device							*device;
+	vk::AccessFlags						 access;
 	vk::ImageLayout						 layout;
+	vk::PipelineStageFlags				 stage;
 	vk::Format							 format;
 	vk::ImageAspectFlags				 aspectFlags;
 
@@ -176,15 +178,17 @@ class VulkanImage2D : public Image2D {
 	static vk::ImageAspectFlags getAspectFlags(vk::Format format);
 
    public:
-	void transitionLayout(CommandBuffer &commandBuffer, vk::ImageLayout newLayout, vk::AccessFlags srcAccess,
-						  vk::AccessFlags dstAccess, vk::PipelineStageFlags srcStage, vk::PipelineStageFlags dstStage);
+	void transitionLayout(CommandBuffer &commandBuffer, vk::ImageLayout newLayout, vk::AccessFlags dstAccess,
+						  vk::PipelineStageFlags dstStage);
 
-	VulkanImage2D(VulkanNRI &nri, vk::Image img, vk::ImageLayout layout, vk::Format fmt, vkb::Device &dev,
-				  uint32_t width, uint32_t height)
+	VulkanImage2D(VulkanNRI &nri, vk::Image img, vk::ImageLayout layout, vk::PipelineStageFlags stage,
+				  vk::Format fmt, vkb::Device &dev, uint32_t width, uint32_t height)
 		: nri(&nri),
 		  image(img),
 		  device(&dev),
+		  access(vk::AccessFlagBits::eNone),
 		  layout(layout),
+		  stage(stage),
 		  format(fmt),
 		  aspectFlags(getAspectFlags(fmt)),
 		  width(width),

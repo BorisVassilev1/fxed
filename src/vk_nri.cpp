@@ -274,6 +274,9 @@ void VulkanNRI::pickPhysicalDevice() {
 	res = physicalDevice.enable_extension_features_if_present(
 		vk::PhysicalDeviceDynamicRenderingFeatures().setDynamicRendering(true));
 	if (!res) { THROW_RUNTIME_ERR("Failed to enable required dynamic rendering features"); }
+	res = physicalDevice.enable_extension_features_if_present(
+		vk::PhysicalDeviceSynchronization2Features().setSynchronization2(true));
+	if (!res) { THROW_RUNTIME_ERR("Failed to enable required synchronization2 features"); }
 	dbLog(dbg::LOG_INFO, "Selected physical device: ", physicalDevice.name);
 }
 
@@ -730,8 +733,7 @@ void VulkanImage2D::clear(CommandBuffer &commandBuffer, glm::vec4 color) {
 	vk::ClearColorValue v{color.r, color.g, color.b, color.a};
 	vkBuf.begin();
 
-	transitionLayout(vkBuf, vk::ImageLayout::eTransferDstOptimal, vk::AccessFlagBits::eNone,
-					 vk::AccessFlagBits::eTransferWrite, vk::PipelineStageFlagBits::eTopOfPipe,
+	transitionLayout(vkBuf, vk::ImageLayout::eTransferDstOptimal, vk::AccessFlagBits::eTransferWrite,
 					 vk::PipelineStageFlagBits::eTransfer);
 
 	// vkBuf.commandBuffer.clearColorImage(image.get(), vk::ImageLayout::eTransferDstOptimal, v,
@@ -745,19 +747,14 @@ void VulkanImage2D::clear(CommandBuffer &commandBuffer, glm::vec4 color) {
 void VulkanImage2D::prepareForPresent(CommandBuffer &commandBuffer) {
 	auto &vkBuf = static_cast<VulkanCommandBuffer &>(commandBuffer);
 
-	transitionLayout(vkBuf, vk::ImageLayout::ePresentSrcKHR,
-					 vk::AccessFlagBits::eTransferWrite | vk::AccessFlagBits::eColorAttachmentWrite,
-					 vk::AccessFlagBits::eNone,
-					 vk::PipelineStageFlagBits::eTransfer | vk::PipelineStageFlagBits::eColorAttachmentOutput,
-					 vk::PipelineStageFlagBits::eBottomOfPipe);
+	transitionLayout(vkBuf, vk::ImageLayout::ePresentSrcKHR, vk::AccessFlagBits::eNone,
+					 vk::PipelineStageFlagBits::eColorAttachmentOutput);
 }
 void VulkanImage2D::prepareForStorage(CommandBuffer &commandBuffer) {
 	auto &vkBuf = static_cast<VulkanCommandBuffer &>(commandBuffer);
 
 	transitionLayout(vkBuf, vk::ImageLayout::eGeneral,
-					 vk::AccessFlagBits::eTransferWrite | vk::AccessFlagBits::eColorAttachmentWrite,
 					 vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite,
-					 vk::PipelineStageFlagBits::eTransfer | vk::PipelineStageFlagBits::eColorAttachmentOutput,
 					 vk::PipelineStageFlagBits::eComputeShader | vk::PipelineStageFlagBits::eFragmentShader |
 						 vk::PipelineStageFlagBits::eVertexShader);
 }
@@ -765,10 +762,7 @@ void VulkanImage2D::prepareForStorage(CommandBuffer &commandBuffer) {
 void VulkanImage2D::prepareForTexture(CommandBuffer &commandBuffer) {
 	auto &vkBuf = static_cast<VulkanCommandBuffer &>(commandBuffer);
 
-	transitionLayout(vkBuf, vk::ImageLayout::eShaderReadOnlyOptimal,
-					 vk::AccessFlagBits::eTransferWrite | vk::AccessFlagBits::eColorAttachmentWrite,
-					 vk::AccessFlagBits::eShaderRead,
-					 vk::PipelineStageFlagBits::eTransfer | vk::PipelineStageFlagBits::eColorAttachmentOutput,
+	transitionLayout(vkBuf, vk::ImageLayout::eShaderReadOnlyOptimal, vk::AccessFlagBits::eShaderRead,
 					 vk::PipelineStageFlagBits::eFragmentShader | vk::PipelineStageFlagBits::eVertexShader |
 						 vk::PipelineStageFlagBits::eComputeShader);
 }
@@ -776,15 +770,13 @@ void VulkanImage2D::prepareForTexture(CommandBuffer &commandBuffer) {
 void VulkanImage2D::prepareForTransferDst(CommandBuffer &commandBuffer) {
 	auto &vkBuf = static_cast<VulkanCommandBuffer &>(commandBuffer);
 
-	transitionLayout(vkBuf, vk::ImageLayout::eTransferDstOptimal, vk::AccessFlagBits::eNone,
-					 vk::AccessFlagBits::eTransferWrite, vk::PipelineStageFlagBits::eTopOfPipe,
+	transitionLayout(vkBuf, vk::ImageLayout::eTransferDstOptimal, vk::AccessFlagBits::eTransferWrite,
 					 vk::PipelineStageFlagBits::eTransfer);
 }
 void VulkanImage2D::prepareForTransferSrc(CommandBuffer &commandBuffer) {
 	auto &vkBuf = static_cast<VulkanCommandBuffer &>(commandBuffer);
 
-	transitionLayout(vkBuf, vk::ImageLayout::eTransferSrcOptimal, vk::AccessFlagBits::eNone,
-					 vk::AccessFlagBits::eTransferRead, vk::PipelineStageFlagBits::eTopOfPipe,
+	transitionLayout(vkBuf, vk::ImageLayout::eTransferSrcOptimal, vk::AccessFlagBits::eTransferRead,
 					 vk::PipelineStageFlagBits::eTransfer);
 }
 
@@ -804,8 +796,7 @@ void VulkanImage2D::copyFrom(CommandBuffer &commandBuffer, Buffer &srcBuffer, st
 						 (VkPipelineStageFlags)vk::PipelineStageFlagBits::eTransfer,	 // dstStageMask
 						 0, 0, nullptr, 1, (VkBufferMemoryBarrier *)&bufferBarrier, 0, nullptr);
 
-	transitionLayout(vkCmdBuf, vk::ImageLayout::eTransferDstOptimal, vk::AccessFlagBits::eNone,
-					 vk::AccessFlagBits::eTransferWrite, vk::PipelineStageFlagBits::eTopOfPipe,
+	transitionLayout(vkCmdBuf, vk::ImageLayout::eTransferDstOptimal, vk::AccessFlagBits::eTransferWrite,
 					 vk::PipelineStageFlagBits::eTransfer);
 
 	vk::BufferImageCopy region(srcOffset, srcRowPitch, 0, vk::ImageSubresourceLayers(aspectFlags, 0, 0, 1),
@@ -827,17 +818,18 @@ vk::ImageAspectFlags VulkanImage2D::getAspectFlags(vk::Format format) {
 	return vk::ImageAspectFlagBits::eColor;
 }
 
-void VulkanImage2D::transitionLayout(CommandBuffer &commandBuffer, vk::ImageLayout newLayout, vk::AccessFlags srcAccess,
-									 vk::AccessFlags dstAccess, vk::PipelineStageFlags srcStage,
+void VulkanImage2D::transitionLayout(CommandBuffer &commandBuffer, vk::ImageLayout newLayout, vk::AccessFlags dstAccess,
 									 vk::PipelineStageFlags dstStage) {
 	auto &vkBuf = static_cast<VulkanCommandBuffer &>(commandBuffer);
 
-	vk::ImageMemoryBarrier barrier(srcAccess, dstAccess, layout, newLayout, vk::QueueFamilyIgnored,
-								   vk::QueueFamilyIgnored, image.get(), {aspectFlags, 0, 1, 0, 1});
+	vk::ImageMemoryBarrier barrier(access, dstAccess, layout, newLayout, vk::QueueFamilyIgnored, vk::QueueFamilyIgnored,
+								   image.get(), {aspectFlags, 0, 1, 0, 1});
 	vkBuf.begin();
-	vkCmdPipelineBarrier(vkBuf.commandBuffer, (VkPipelineStageFlags)srcStage, (VkPipelineStageFlags)dstStage, 0, 0,
+	vkCmdPipelineBarrier(vkBuf.commandBuffer, (VkPipelineStageFlags)stage, (VkPipelineStageFlags)dstStage, 0, 0,
 						 nullptr, 0, nullptr, 1, (VkImageMemoryBarrier *)&barrier);
 	layout = newLayout;
+	access = dstAccess;
+	stage  = dstStage;
 }
 
 VulkanImage2D::VulkanImage2D(VulkanNRI &nri, uint32_t width, uint32_t height, Format format, ImageUsage usage)
@@ -1023,15 +1015,16 @@ void VulkanWindow::createSwapChain(uint32_t &width, uint32_t &height) {
 	vkGetSwapchainImagesKHR(nri.getDevice(), swapChain, &imageCount, (VkImage *)swapChainImages.data());
 
 	for (const auto &image : swapChainImages) {
-		VulkanImage2D nriImage = VulkanImage2D(nri, image, vk::ImageLayout::eUndefined, vk::Format::eB8G8R8A8Unorm,
-											   nri.getDevice(), width, height);
+		VulkanImage2D nriImage =
+			VulkanImage2D(nri, image, vk::ImageLayout::eUndefined, vk::PipelineStageFlagBits::eColorAttachmentOutput,
+						 vk::Format::eB8G8R8A8Unorm, nri.getDevice(), width, height);
 
 		VulkanRenderTarget renderTarget = VulkanRenderTarget(nri, nriImage);
 
 		this->swapChainImages.emplace_back(std::move(nriImage), std::move(renderTarget));
-		this->swapChainImages.back().image.transitionLayout(
-			*commandBuffer, vk::ImageLayout::ePresentSrcKHR, vk::AccessFlagBits::eNone, vk::AccessFlagBits::eNone,
-			vk::PipelineStageFlagBits::eTopOfPipe, vk::PipelineStageFlagBits::eBottomOfPipe);
+		this->swapChainImages.back().image.transitionLayout(*commandBuffer, vk::ImageLayout::ePresentSrcKHR,
+															vk::AccessFlagBits::eNone,
+															vk::PipelineStageFlagBits::eColorAttachmentOutput);
 	}
 	needsResize = false;
 }
@@ -1056,10 +1049,9 @@ bool VulkanWindow::beginFrame() {
 	assert(result == vk::Result::eSuccess || result == vk::Result::eSuboptimalKHR);
 	this->currentImageIndex = imageIndex;
 
-	swapChainImages[imageIndex].image.transitionLayout(
-		*commandBuffer, vk::ImageLayout::eColorAttachmentOptimal, vk::AccessFlagBits::eNone,
-		vk::AccessFlagBits::eColorAttachmentWrite, vk::PipelineStageFlagBits::eBottomOfPipe,
-		vk::PipelineStageFlagBits::eColorAttachmentOutput);
+	swapChainImages[imageIndex].image.transitionLayout(*commandBuffer, vk::ImageLayout::eColorAttachmentOptimal,
+													   vk::AccessFlagBits::eColorAttachmentWrite,
+													   vk::PipelineStageFlagBits::eColorAttachmentOutput);
 	return true;
 }
 
