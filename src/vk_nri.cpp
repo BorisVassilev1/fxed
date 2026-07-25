@@ -408,7 +408,7 @@ VulkanDescriptorAllocator::VulkanDescriptorAllocator(VulkanNRI &nri)
 }
 
 ResourceHandle VulkanDescriptorAllocator::addUniformBufferDescriptor(const VulkanBuffer &buffer) {
-	uint32_t descriptorIndex = currentBufferDescriptorIndex++;
+	uint32_t descriptorIndex = currentUniformBufferDescriptorIndex++;
 
 	vk::DescriptorBufferInfo bufferInfo(buffer.getBuffer(), 0, VK_WHOLE_SIZE);
 
@@ -422,7 +422,7 @@ ResourceHandle VulkanDescriptorAllocator::addUniformBufferDescriptor(const Vulka
 }
 
 ResourceHandle VulkanDescriptorAllocator::addStorageBufferDescriptor(const VulkanBuffer &buffer) {
-	uint32_t descriptorIndex = currentBufferDescriptorIndex++;
+	uint32_t descriptorIndex = currentStorageBufferDescriptorIndex++;
 
 	dbLog(dbg::LOG_INFO, "Adding storage buffer descriptor at index ", descriptorIndex);
 	vk::DescriptorBufferInfo bufferInfo(buffer.getBuffer(), 0, VK_WHOLE_SIZE);
@@ -437,7 +437,7 @@ ResourceHandle VulkanDescriptorAllocator::addStorageBufferDescriptor(const Vulka
 }
 
 ResourceHandle VulkanDescriptorAllocator::addSamplerImageDescriptor(const VulkanTexture2D &image) {
-	uint32_t descriptorIndex = currentImageDescriptorIndex++;
+	uint32_t descriptorIndex = currentSamplerImageDescriptorIndex++;
 
 	vk::DescriptorImageInfo imageInfo(*(image.getSampler()), *(image.get()), vk::ImageLayout::eShaderReadOnlyOptimal);
 
@@ -451,7 +451,7 @@ ResourceHandle VulkanDescriptorAllocator::addSamplerImageDescriptor(const Vulkan
 }
 
 ResourceHandle VulkanDescriptorAllocator::addStorageImageDescriptor(const VulkanStorageImage2D &image) {
-	uint32_t descriptorIndex = currentImageDescriptorIndex++;
+	uint32_t descriptorIndex = currentStorageImageDescriptorIndex++;
 
 	vk::DescriptorImageInfo imageInfo(nullptr, *(image.get()), vk::ImageLayout::eGeneral);
 

@@ -52,8 +52,10 @@ class VulkanDescriptorAllocator {
 	vkraii::DescriptorSetLayout descriptorSetLayout;
 	vkraii::DescriptorSet		bigDescriptorSet;
 
-	int currentBufferDescriptorIndex = 0;
-	int currentImageDescriptorIndex	 = 0;
+	int currentStorageBufferDescriptorIndex = 0;
+	int currentUniformBufferDescriptorIndex = 0;
+	int currentStorageImageDescriptorIndex = 0;
+	int currentSamplerImageDescriptorIndex = 0;
 
    public:
 	VulkanDescriptorAllocator(VulkanNRI &nri);
